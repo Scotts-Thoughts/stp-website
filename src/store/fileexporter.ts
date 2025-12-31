@@ -173,13 +173,18 @@ export const useFileExporter = defineStore("file-exporter", () => {
         const timeStart = performance.now();
         setTimeout(async () => {
             try {
-                // Fixed export dimensions for consistent 1920x1080 output
+                // Wait for all fonts to be loaded before exporting
+                await document.fonts.ready;
+                
+                // Export options - let the element define its own dimensions (1920x1080 wrapper)
+                // Don't override width/height as this can break CSS grid layouts
                 const exportOptions = {
                     backgroundColor: "transparent",
                     cacheBust: true,
                     pixelRatio: scale,
-                    width: 1920,
-                    height: 1080,
+                    // Ensure fonts are properly embedded in export
+                    skipFonts: false,
+                    preferredFontFormat: 'woff2',
                 };
                 
                 if (isElectron() && window.electronDialog && electronExportPath.value) {
