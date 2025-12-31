@@ -173,13 +173,18 @@ export const useFileExporter = defineStore("file-exporter", () => {
         const timeStart = performance.now();
         setTimeout(async () => {
             try {
+                // Fixed export dimensions for consistent 1920x1080 output
+                const exportOptions = {
+                    backgroundColor: "transparent",
+                    cacheBust: true,
+                    pixelRatio: scale,
+                    width: 1920,
+                    height: 1080,
+                };
+                
                 if (isElectron() && window.electronDialog && electronExportPath.value) {
                     // Use Electron's file system
-                    const dataUrl = await htmlToImage.toPng(root, {
-                        backgroundColor: "transparent",
-                        cacheBust: true,
-                        pixelRatio: scale
-                    });
+                    const dataUrl = await htmlToImage.toPng(root, exportOptions);
                     
                     const result = await window.electronDialog.saveFile(electronExportPath.value, filename, dataUrl);
                     if (!result.success) {
@@ -190,11 +195,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 } else {
                     // Use browser file system
                     const fs = filesystem.value!;
-                    const blob = await htmlToImage.toBlob(root, {
-                        backgroundColor: "transparent",
-                        cacheBust: true,
-                        pixelRatio: scale
-                    });
+                    const blob = await htmlToImage.toBlob(root, exportOptions);
         
                     if (blob) {
                         await fs.write(filename, blob);

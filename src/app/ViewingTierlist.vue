@@ -186,7 +186,8 @@ contextMenu.setOptions([
         shortcut: 'Ctrl+E',
         action() {
             let startToastId = -1;
-            fileexporter.exportElement(root.value!.parentElement!.parentElement!, 1, (message, state) => {
+            // Export the wrapper element directly - it has fixed 1920x1080 dimensions
+            fileexporter.exportElement(root.value!, 1, (message, state) => {
                 switch (state) {
                     case 'start':
                         startToastId = toast.addToast(message, 'info', { timeout: -1, pending: true});
