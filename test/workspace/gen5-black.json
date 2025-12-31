@@ -1,0 +1,72 @@
+{
+  "name": "Gen 5 - Black Tierlist",
+  "game": "Black",
+  "total": [82, 348, 649],
+  "thresholds_first": {
+    "realtime": [
+      {"label": "default", "data": ["1:15:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:15:00.00", "2:30:00.00", "2:45:00.00", "3:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["7:00:00", "7:30:00", "8:00:00", "8:20:00", "8:40:00", "9:00:00", "9:20:00", "9:40:00"]}]
+  },
+  "thresholds_best": {
+    "realtime": [
+      {"label": "default", "data": ["1:15:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:15:00.00", "2:30:00.00", "2:45:00.00", "3:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["6:30:00", "7:00:00", "7:30:00", "8:00:00", "8:30:00", "9:00:00", "9:30:00", "10:00:00"]}]
+  },
+  "platform": "Nintendo DS",
+  "cartridgeImage": "/images/cartridges/5-black.png",
+  "visible": true,
+  "finalTierLabel": "Impossible",
+  "entries": {
+    "Serperior": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-25", "realtime": "1:47:10.00", "gametime": "5:44:00", "level": 69, "resets": 4, "blackouts": 2}
+      ]
+    },
+    "Emboar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-26", "realtime": "1:40:28.00", "gametime": "5:15:00", "level": 71, "resets": 5, "blackouts": 3}
+      ]
+    },
+    "Samurott": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-27", "realtime": "1:48:12.00", "gametime": "5:33:00", "level": 73, "resets": 9, "blackouts": 3}
+      ]
+    },
+    "Stoutland": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-28", "realtime": "1:32:20.00", "gametime": "4:59:00", "level": 68, "resets": 2, "blackouts": 8}
+      ]
+    },
+    "Zoroark": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-30", "realtime": "1:56:58.00", "gametime": "6:07:00", "level": 68, "resets": 7, "blackouts": 23}
+      ]
+    },
+    "Beheeyem": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-29", "realtime": "3:19:12.00", "gametime": "9:45:00", "level": 78, "resets": 40, "blackouts": 24}
+      ]
+    },
+    "Genesect": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-31", "realtime": "1:42:47.00", "gametime": "5:13:00", "level": 65, "resets": 11, "blackouts": 4}
+      ]
+    }
+  }
+}

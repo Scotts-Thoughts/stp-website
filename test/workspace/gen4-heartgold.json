@@ -1,0 +1,188 @@
+{
+  "name": "Gen 4 - HeartGold Tierlist",
+  "game": "HeartGold",
+  "total": [266, 493],
+  "thresholds_first": {
+    "realtime": [
+      {"label": "default", "data": ["2:30:00.00", "2:40:00.00", "2:50:00.00", "3:00:00.00", "3:15:00.00", "3:30:00.00", "3:45:00.00", "4:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["7:00:00", "7:30:00", "8:00:00", "8:20:00", "8:40:00", "9:00:00", "9:20:00", "9:40:00"]}]
+  },
+  "thresholds_best": {
+    "realtime": [
+      {"label": "default", "data": ["2:30:00.00", "2:40:00.00", "2:50:00.00", "3:00:00.00", "3:15:00.00", "3:30:00.00", "3:45:00.00", "4:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["6:30:00", "7:00:00", "7:30:00", "8:00:00", "8:30:00", "9:00:00", "9:30:00", "10:00:00"]}]
+  },
+  "platform": "Nintendo DS",
+  "cartridgeImage": "/images/cartridges/4-heartgold.png",
+  "visible": true,
+  "finalTierLabel": "Impossible",
+  "entries": {
+    "Meganium": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [{"finished": true, "releasedate": "2024-12-25", "realtime": "3:10:57.00", "gametime": "9:51:00", "level": 85, "resets": 21}]
+    },
+    "Typhlosion": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [{"finished": true, "releasedate": "2024-12-26", "realtime": "4:00:47.00", "gametime": "11:37:00", "level": 98, "resets": 41}]
+    },
+    "Feraligatr": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [{"finished": true, "releasedate": "2024-12-27", "realtime": "2:43:19.00", "gametime": "8:26:00", "level": 87, "resets": 16}]
+    },
+    "Ampharos": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [{"finished": true, "releasedate": "2024-12-28", "realtime": "3:50:34.00", "gametime": "9:48:00", "level": 92, "resets": 68}]
+    },
+    "Donphan": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [{"finished": true, "releasedate": "2024-12-29", "realtime": "3:40:16.00", "gametime": "10:59:00", "level": 100, "resets": 38}]
+    },
+    "Ursaring": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2024-12-30", "realtime": "3:29:57.00", "gametime": "9:33:00", "level": 100, "resets": 82, "blackouts": 9}
+      ]
+    },
+    "Mewtwo": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2024-12-31", "realtime": "2:31:46.00", "gametime": "7:29:00", "level": 80, "resets": 13, "blackouts": 0}
+      ]
+    },
+    "Staraptor": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-02-01", "realtime": "3:10:15.62", "gametime": "9:27:00", "level": 98, "resets": 23, "blackouts": 5}
+      ]
+    },
+    "Heracross": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-03-03", "realtime": "2:59:32.40", "gametime": "8:34:00", "level": 86, "resets": 42, "blackouts": 4}
+      ]
+    },
+    "Pidgeot": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-01-11", "realtime": "3:56:47.34", "gametime": "11:34:00", "level": 99, "resets": 18, "blackouts": 1}
+      ]
+    },
+    "Yanmega": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-03-22", "realtime": "3:23:53.57", "gametime": "9:34:00", "level": 88, "resets": 56, "blackouts": 0}
+      ]
+    },
+    "Sudowoodo": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-03-31", "realtime": "4:51:37.77", "gametime": "13:18:00", "level": 100, "resets": 85, "blackouts": 11}
+      ]
+    },
+    "Ambipom": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-04-14", "realtime": "2:37:27.80", "gametime": "8:01:00", "level": 88, "resets": 26, "blackouts": 2}
+      ]
+    },
+    "Lickilicky": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-04-28", "realtime": "2:58:47.36", "gametime": "8:45:00", "level": 85, "resets": 14, "blackouts": 0}
+      ]
+    },
+    "Tangrowth": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-05-12", "realtime": "4:22:35.81", "gametime": "11:42:00", "level": 98, "resets": 71, "blackouts": 5}
+      ]
+    },
+    "Rhyperior": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-08-16", "realtime": "3:43:14.90", "gametime": "10:47:00", "level": 75, "resets": 31, "blackouts": 12}
+      ]
+    },
+    "Togekiss": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-09-27", "realtime": "3:39:34.23", "gametime": "10:34:00", "level": 90, "resets": 67, "blackouts": 8}
+      ]
+    },
+    "Mismagius": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-10-18", "realtime": "2:36:40.26", "gametime": "8:14:00", "level": 91, "resets": 36, "blackouts": 3}
+      ]
+    },
+    "Dusknoir": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-10-29", "realtime": "4:03:46.54", "gametime": "11:37:00", "level": 92, "resets": 56, "blackouts": 6}
+      ]
+    },
+    "Mamoswine": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-11-16", "realtime": "3:00:01.66", "gametime": "9:00:00", "level": 81, "resets": 24, "blackouts": 6}
+      ]
+    },
+    "Lumineon": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-11-27", "realtime": "3:11:56.15", "gametime": "9:30:00", "level": 98, "resets": 37, "blackouts": 6}
+      ]
+    },
+    "PorygonZ": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-04", "realtime": "2:42:39.02", "gametime": "8:26:00", "level": 84, "resets": 38, "blackouts": 10}
+      ]
+    },
+    "Magneton": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-11", "realtime": "2:29:28.08", "gametime": "8:17:00", "level": 95, "resets": 13, "blackouts": 3}
+      ]
+    },
+    "Celebi": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-18", "realtime": "2:07:55.82", "gametime": "6:42:00", "level": 78, "resets": 11, "blackouts": 0}
+      ]
+    },
+    "Mew": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-18", "realtime": "1:59:18.75", "gametime": "6:25:00", "level": 80, "resets": 11, "blackouts": 0}
+      ]
+    }
+  }
+}

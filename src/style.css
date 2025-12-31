@@ -1,0 +1,85 @@
+@font-face {
+    src: url(/fonts/OpenSans-ExtraBold.ttf);
+    font-family: oseb;
+}
+@font-face {
+    src: url(/fonts/Play-Bold.ttf);
+    font-family: osb;
+}
+@font-face {
+    src: url(/fonts/TitanOne-Regular.ttf);
+    font-family: titan;
+}
+@font-face {
+    src: url(/fonts/Play-Bold.ttf);
+    font-family: play;
+}
+@font-face {
+    src: url(/fonts/Teko-Bold.ttf);
+    font-family: Teko;
+}
+
+:root {
+    color-scheme: dark light;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    /* deactivate text select */
+    user-select: none;
+}
+
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    color: white;
+    background-color: transparent;
+}
+
+#app {
+    height: 100%;
+    width: 100%;
+    position: relative;
+    font-family: 'Teko', sans-serif;
+    overflow: hidden;
+}
+
+button.big {
+    font-family: 'Teko', sans-serif;
+    font-size: 1.5rem;
+    color: white;
+    background-color: transparent;
+    border: 2px solid white;
+    border-radius: 5px;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+button.big:hover {
+    background-color: white;
+    color: black;
+}
+
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: 20px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 20px;
+}

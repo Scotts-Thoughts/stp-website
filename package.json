@@ -1,0 +1,77 @@
+{
+  "name": "pokemon-tierlist-creator",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A tierlist creator for ranking Pokemon solo challenge playthroughs",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "electron:build": "npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder",
+    "electron:preview": "npm run build && tsc -p electron/tsconfig.json && electron ."
+  },
+  "dependencies": {
+    "@types/wicg-file-system-access": "^2023.10.4",
+    "@vueuse/core": "^13.6.0",
+    "html-to-image": "^1.11.11",
+    "idb-keyval": "^6.2.2",
+    "pinia": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/compiler-sfc": "^3.4.15",
+    "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-squirrel-startup": "^1.0.1",
+    "typescript": "^5.2.2",
+    "vite": "^7.0.6",
+    "vue": "^3.5.18",
+    "vue-tsc": "^3.0.5",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.stp.pokemon-tierlist",
+    "productName": "Pokemon Tierlist Creator",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bundled-workspace",
+        "to": "workspace",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/images/pokemon/25.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "public/images/pokemon/25.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/images/pokemon/25.png"
+    }
+  }
+}
