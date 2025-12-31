@@ -17,6 +17,10 @@ export type Tierlist = {
     imageSource?: string
     platform?: string
     finalTierLabel?: string
+    surgeTierLabel?: string
+    surgeTierImage?: string
+    brunoTierLabel?: string
+    brunoTierImage?: string
     cartridgeImage?: string
     visible?: boolean
 }

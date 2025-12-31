@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { METRIC, MetricKeys, useTierlist } from '../store';
 
 const props = defineProps<{
@@ -8,6 +8,69 @@ const props = defineProps<{
 }>();
 
 const tierlist = useTierlist();
+
+// Position state for the teleported popout
+const popoutStyle = ref({
+    top: '0px',
+    left: '0px',
+    visibility: 'hidden' as 'hidden' | 'visible',
+});
+
+// Reference to a hidden anchor element to get parent position
+const anchorRef = ref<HTMLElement | null>(null);
+const popoutRef = ref<HTMLElement | null>(null);
+
+function updatePosition() {
+    if (!anchorRef.value) return;
+    
+    const parent = anchorRef.value.parentElement;
+    if (!parent) return;
+    
+    const rect = parent.getBoundingClientRect();
+    
+    // Get actual popout dimensions if available
+    const popoutRect = popoutRef.value?.getBoundingClientRect();
+    const popoutWidth = popoutRect?.width ?? 280;
+    const popoutHeight = popoutRect?.height ?? 200;
+    
+    // Center horizontally on the parent element
+    let left = rect.left + rect.width / 2;
+    
+    let top: number;
+    if (props.openToTop) {
+        // Position above the element
+        top = rect.top - popoutHeight - 16;
+    } else {
+        // Position below the element
+        top = rect.bottom + 8;
+    }
+    
+    popoutStyle.value = {
+        top: `${top}px`,
+        left: `${left}px`,
+        visibility: 'visible',
+    };
+}
+
+// Update position when mounted and when pokemon changes
+onMounted(() => {
+    nextTick(updatePosition);
+    // Update again after a frame to get accurate popout dimensions
+    requestAnimationFrame(() => {
+        updatePosition();
+    });
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('scroll', updatePosition, true);
+    window.removeEventListener('resize', updatePosition);
+});
+
+watch(() => props.pokemon, () => {
+    nextTick(updatePosition);
+});
 
 const metrics = computed(() => {
     const metrics = tierlist.getMetrics(props.pokemon);
@@ -40,59 +103,77 @@ const metrics = computed(() => {
 
 
 <template>
-
-    <div :class="{
-        'popout': true,
-        'top': props.openToTop,
-    }">
-        <div class="content">
-            <div class="header">
-                <h3>{{ pokemon }}</h3>
-            </div>
-            <div class="body">
-                <template v-for="(value, key) in metrics" :key="key">
-                    <div>{{ METRIC[key as MetricKeys]?.title }}: </div>
-                    <div>{{ value }}</div>
-                </template>
+    <!-- Hidden anchor to track parent position -->
+    <span ref="anchorRef" class="anchor"></span>
+    
+    <!-- Teleport popout to body to escape overflow clipping -->
+    <Teleport to="body">
+        <div 
+            ref="popoutRef"
+            class="metric-popout"
+            :style="popoutStyle"
+        >
+            <div class="content">
+                <div class="header">
+                    <h3>{{ pokemon }}</h3>
+                </div>
+                <div class="body">
+                    <template v-for="(value, key) in metrics" :key="key">
+                        <div>{{ METRIC[key as MetricKeys]?.title }}: </div>
+                        <div>{{ value }}</div>
+                    </template>
+                </div>
             </div>
         </div>
-    </div>
-
+    </Teleport>
 </template>
 
 
 <style scoped>
-.popout {
+.anchor {
     position: absolute;
-    top: calc(100% + 8px);
-    left: 50%;
-    transform: translate(-50%, 0);
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+</style>
+
+<!-- Non-scoped styles for teleported content -->
+<style>
+.metric-popout {
+    position: fixed;
+    transform: translateX(-50%);
     background: #333333e8;
     box-shadow: 0 10px 25px #000, 0 10px 25px -10px #000;
     border-radius: 10px;
-    z-index: 100;
+    z-index: 10000;
     padding: 20px;
     font-size: 24px;
+    pointer-events: none;
 }
 
-.popout.top {
-    top: auto;
-    bottom: calc(100% + 16px);
+.metric-popout .header h3 {
+    margin: 0;
+    padding-bottom: 8px;
+    font-family: Consolas, monospace;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: bold;
 }
 
-.popout .body {
+.metric-popout .body {
     display: grid;
     grid-template-columns: 175px 1fr;
     font-family: Consolas, monospace;
     gap: 5px;
 }
 
-.popout .body > :nth-child(odd) {
+.metric-popout .body > :nth-child(odd) {
     justify-self: start;
 }
 
-.popout .body > :nth-child(even) {
+.metric-popout .body > :nth-child(even) {
     justify-self: end;
 }
-
 </style>
