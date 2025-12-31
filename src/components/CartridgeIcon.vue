@@ -50,16 +50,16 @@ const displayImage = computed(() => {
 
 <style scoped>
 .cartridge {
-  width: 140px;
-  height: 160px;
+  width: 120px;
+  height: 136px;
   cursor: pointer;
   transition: transform 0.2s ease, filter 0.2s ease;
   position: relative;
 }
 
 .cartridge.gba {
-  width: 160px;
-  height: 140px;
+  width: 136px;
+  height: 120px;
 }
 
 .cartridge:hover {
@@ -81,13 +81,13 @@ const displayImage = computed(() => {
 
 .cartridge-label {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
   background: linear-gradient(135deg, #f4e4bc 0%, #e6d7a3 50%, #d4c08a 100%);
   border-radius: 4px;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -107,17 +107,17 @@ const displayImage = computed(() => {
 }
 
 .game-image {
-  width: 100px;
-  height: 100px;
-  margin-bottom: 8px;
+  width: 85px;
+  height: 85px;
+  margin-bottom: 6px;
   border-radius: 4px;
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .cartridge.gba .game-image {
-  width: 120px;
-  height: 100px;
+  width: 102px;
+  height: 85px;
 }
 
 .game-image img {
@@ -141,7 +141,7 @@ const displayImage = computed(() => {
 
 .game-title {
   font-family: 'TitanOne', 'Arial Black', sans-serif;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: bold;
   color: #2c3e50;
   line-height: 1.1;
@@ -150,12 +150,12 @@ const displayImage = computed(() => {
 }
 
 .cartridge.gba .game-title {
-  font-size: 10px;
+  font-size: 8px;
 }
 
 .game-subtitle {
   font-family: 'Play', 'Arial', sans-serif;
-  font-size: 8px;
+  font-size: 7px;
   color: #34495e;
   font-weight: normal;
   line-height: 1;

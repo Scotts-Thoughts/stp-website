@@ -1,7 +1,7 @@
 {
   "name": "Gen 5 - White2 Tierlist",
   "game": "White2",
-  "total": [348, 649],
+  "total": [649],
   "thresholds_first": {
     "realtime": [
       {"label": "default", "data": ["1:15:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:15:00.00", "2:30:00.00", "2:45:00.00", "3:00:00.00"]}
@@ -16,7 +16,7 @@
   },
   "platform": "Nintendo DS",
   "cartridgeImage": "/images/cartridges/5-white2.png",
-  "visible": false,
+  "visible": true,
   "finalTierLabel": "Impossible",
   "entries": {}
 }

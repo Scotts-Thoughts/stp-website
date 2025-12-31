@@ -1,7 +1,7 @@
 {
   "name": "Gen 4 - SoulSilver Tierlist",
   "game": "SoulSilver",
-  "total": [266, 493],
+  "total": [493],
   "thresholds_first": {
     "realtime": [
       {"label": "default", "data": ["2:30:00.00", "2:40:00.00", "2:50:00.00", "3:00:00.00", "3:15:00.00", "3:30:00.00", "3:45:00.00", "4:00:00.00"]}
@@ -16,7 +16,7 @@
   },
   "platform": "Nintendo DS",
   "cartridgeImage": "/images/cartridges/4-soulsilver.png",
-  "visible": false,
+  "visible": true,
   "finalTierLabel": "Impossible",
   "entries": {}
 }

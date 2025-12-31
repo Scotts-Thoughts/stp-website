@@ -1,0 +1,236 @@
+{
+  "name": "Scott's Thoughts - Gen 3 - FireRed Postgame Tierlist",
+  "game": "FireRed",
+  "total": [81],
+  "thresholds_first": {
+    "realtime": [
+      {"label": "default", "data": ["0:20:00.00", "0:25:00.00", "0:30:00.00", "0:35:00.00", "0:40:00.00", "0:45:00.00", "0:50:00.00", "0:55:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["1:00:00", "2:00:00", "3:00:00", "4:00:00", "5:00:00", "6:00:00", "7:00:00", "8:00:00"]}]
+  },
+  "thresholds_best": {
+    "realtime": [
+      {"label": "default", "data": ["1:20:00.00", "1:30:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00", "2:10:00.00", "2:20:00.00", "2:30:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["1:00:00", "2:00:00", "3:00:00", "4:00:00", "5:00:00", "6:00:00", "7:00:00", "8:00:00"]}]
+  },
+  "platform": "Game Boy Advance",
+  "cartridgeImage": "/images/cartridges/3-firered.png",
+  "visible": true,
+  "finalTierLabel": "Impossible",
+  "entries": {
+    "Hitmonchan": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "1970-11-30", "realtime": "0:28:01.00"}]
+    },
+    "Golbat": {"numAttempts": 1, "numFinishes": 1, "attempts": [{"finished": true, "releasedate": "2024-06-01", "realtime": "0:31:19.00"}]},
+    "Golduck": {"numAttempts": 1, "numFinishes": 1, "attempts": [{"finished": true, "releasedate": "2024-07-06", "realtime": "0:18:13.00"}]},
+    "Porygon": {
+      "numAttempts": 1,
+      "numFinishes": 1,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-08-24", "realtime": "0:27:16.00"}]
+    },
+    "Hitmonlee": {"numAttempts": 1, "numFinishes": 1, "attempts": [{"finished": true, "releasedate": "2024-11-29", "realtime": "0:22:07.00"}]},
+    "Dugtrio": {
+      "numAttempts": 3,
+      "numFinishes": 1,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-09-28", "realtime": "0:34:15.00"}]
+    },
+    "Dewgong": {
+      "numAttempts": 3,
+      "numFinishes": 1,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-11-09", "realtime": "0:24:56.00"}]
+    },
+    "Hitmontop": {"numAttempts": 3, "numFinishes": 1, "attempts": [{"finished": true, "releasedate": "2024-12-01", "realtime": "0:39:07.00"}]},
+    "Aerodactyl": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-10-01", "realtime": "0:30:25.00"}]
+    },
+    "Omastar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-10-02", "realtime": "0:23:11.00"}]
+    },
+    "Kabutops": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "tags": ["unreleased"],
+      "attempts": [{"finished": true, "releasedate": "2024-10-03", "realtime": "0:19:57.00"}]
+    },
+    "Tyranitar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "tags": ["unreleased"],
+      "attempts": [
+        {"finished": true, "releasedate": "2024-12-15", "realtime": "0:29:19.87", "gametime": "7:17:00", "level": 79, "resets": 6, "blackouts": 2}
+      ]
+    },
+    "Mewtwo": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2024-07-12", "realtime": "0:17:04.52", "gametime": "4:11:00", "level": 67, "resets": 1, "blackouts": 0}
+      ]
+    },
+    "Hypno": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2024-07-12", "realtime": "0:43:13.16", "gametime": "5:13:00", "level": 77, "resets": 35, "blackouts": 0}
+      ]
+    },
+    "Mr. Mime": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2024-07-12", "realtime": "0:30:34.78", "gametime": "5:04:00", "level": 74, "resets": 17, "blackouts": 0}
+      ]
+    },
+    "Snorlax": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [{"finished": true, "releasedate": "2024-12-08", "realtime": "0:30:27.00", "gametime": "6:31:00", "level": 76, "resets": 5}]
+    },
+    "Mew": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [{"finished": true, "releasedate": "2024-12-22", "realtime": "0:19:45.55", "gametime": "4:51:00", "level": 74, "resets": 1}]
+    },
+    "Arbok": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-01-13", "realtime": "0:41:05.15", "gametime": "8:17:00", "level": 92, "resets": 7, "blackouts": 8}
+      ]
+    },
+    "Sandslash": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-02-10", "realtime": "0:20:38.47", "gametime": "6:19:00", "level": 77, "resets": 3, "blackouts": 0}
+      ]
+    },
+    "Nidoqueen": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-03-10", "realtime": "0:46:01.53", "gametime": "6:42:00", "level": 86, "resets": 10, "blackouts": 12}
+      ]
+    },
+    "Persian": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-03-15", "realtime": "0:52:41.29", "gametime": "6:32:00", "level": 84, "resets": 20, "blackouts": 5}
+      ]
+    },
+    "Poliwrath": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-04-17", "realtime": "0:21:57.32", "gametime": "5:49:00", "level": 77, "resets": 2, "blackouts": 0}
+      ]
+    },
+    "Onix": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-07-19", "realtime": "0:54:55.65", "gametime": "10:41:00", "level": 96, "resets": 17, "blackouts": 5}
+      ]
+    },
+    "Tentacruel": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-10-11", "realtime": "0:23:13.60", "gametime": "8:04:00", "level": 72, "resets": 9, "blackouts": 0}
+      ]
+    },
+    "Gengar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-10-27", "realtime": "1:05:59.70", "gametime": "5:30:00", "level": 76, "resets": 83, "blackouts": 1}
+      ]
+    },
+    "Clefable": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-11-09", "realtime": "0:21:21.07", "gametime": "5:24:00", "level": 77, "resets": 0, "blackouts": 0}
+      ]
+    },
+    "Wigglytuff": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-11-09", "realtime": "0:41:45.31", "gametime": "6:54:00", "level": 87, "resets": 10, "blackouts": 1}
+      ]
+    },
+    "Lapras": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-11-25", "realtime": "0:31:07.22", "gametime": "5:40:00", "level": 80, "resets": 2, "blackouts": 8}
+      ]
+    },
+    "Tauros": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-02", "realtime": "0:40:42.73", "gametime": "6:15:00", "level": 76, "resets": 19, "blackouts": 1}
+      ]
+    },
+    "Pinsir": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:19:56.07", "gametime": "5:15:00", "level": 72, "resets": 6, "blackouts": 0},
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "19:56:00.00", "gametime": "0:00:44", "level": 5, "resets": 6}
+      ]
+    },
+    "Scyther": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:27:15.81", "gametime": "6:12:00", "level": 87, "resets": 4, "blackouts": 7},
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "27:15:00.00", "gametime": "0:00:50", "level": 6, "resets": 4, "blackouts": 7}
+      ]
+    },
+    "Gyarados": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-16", "realtime": "0:26:58.25", "gametime": "10:40:00", "level": 77, "resets": 3, "blackouts": 2}
+      ]
+    },
+    "Electabuzz": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-23", "realtime": "0:39:25.03", "gametime": "6:55:00", "level": 87, "resets": 2, "blackouts": 19}
+      ]
+    },
+    "Jynx": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-23", "realtime": "0:23:46.90", "gametime": "4:24:00", "level": 75, "resets": 20, "blackouts": 0}
+      ]
+    },
+    "Magmar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-23", "realtime": "0:24:38.12", "gametime": "5:26:00", "level": 82, "resets": 7, "blackouts": 1}
+      ]
+    }
+  }
+}

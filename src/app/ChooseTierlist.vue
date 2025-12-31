@@ -14,6 +14,17 @@ const visibleTierlists = computed(() => {
     return workspace.tierlists.filter(tierlist => tierlist.visible !== false);
 });
 
+// Separate "scott-" tierlists from the rest
+const isScottTierlist = (tierlist: { filename: string }) => tierlist.filename.startsWith('scott-');
+
+const mainTierlists = computed(() => {
+    return visibleTierlists.value.filter(tierlist => !isScottTierlist(tierlist));
+});
+
+const scottTierlists = computed(() => {
+    return visibleTierlists.value.filter(tierlist => isScottTierlist(tierlist));
+});
+
 // Define specific order for each platform
 const gameBoyOrder = [
     'Gen 1 - Yellow Tierlist',
@@ -66,7 +77,7 @@ const gameBoyCombinedOrder = [
 
 // Group tierlists by platform with specific ordering
 const gameBoyTierlists = computed(() => {
-    return visibleTierlists.value
+    return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Game Boy')
         .sort((a, b) => {
             const aIndex = gameBoyOrder.indexOf(a.name);
@@ -82,7 +93,7 @@ const gameBoyTierlists = computed(() => {
 });
 
 const gameBoyColorTierlists = computed(() => {
-    return visibleTierlists.value
+    return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Game Boy Color')
         .sort((a, b) => {
             const aIndex = gameBoyColorOrder.indexOf(a.name);
@@ -114,12 +125,13 @@ const gameBoyCombinedTierlists = computed(() => {
 });
 
 // Determine if we should show combined or separate rows
+// With smaller cartridges, we can fit more per row, so always combine GB/GBC
 const shouldCombineGameBoyRows = computed(() => {
-    return gameBoyCombinedTierlists.value.length < 5;
+    return gameBoyCombinedTierlists.value.length <= 8;
 });
 
 const gameBoyAdvanceTierlists = computed(() => {
-    return visibleTierlists.value
+    return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Game Boy Advance')
         .sort((a, b) => {
             const aIndex = gameBoyAdvanceOrder.indexOf(a.name);
@@ -135,7 +147,7 @@ const gameBoyAdvanceTierlists = computed(() => {
 });
 
 const nintendoDSTierlists = computed(() => {
-    return visibleTierlists.value
+    return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Nintendo DS')
         .sort((a, b) => {
             const aIndex = nintendoDSOrder.indexOf(a.name);
@@ -303,6 +315,24 @@ function isGBA(platform?: string): boolean {
                     />
                 </div>
             </template>
+            
+            <!-- Scott's Personal Tierlists Row -->
+            <div v-if="scottTierlists.length > 0" class="scott-section">
+                <h2 class="scott-header">Scott's Tierlists</h2>
+            </div>
+            <div v-if="scottTierlists.length > 0" class="cartridge-row scott-row">
+                <CartridgeIcon 
+                    v-for="(t, i) in scottTierlists" 
+                    :key="'scott-' + i"
+                    :name="t.name"
+                    :imageSource="t.imageSource"
+                    :cartridgeImage="t.cartridgeImage"
+                    :platform="t.platform"
+                    :game="t.game"
+                    :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '']"
+                    @click="$emit('select', workspace.tierlists.indexOf(t))"
+                />
+            </div>
         </div>
     </div>
 </template>
@@ -320,26 +350,47 @@ function isGBA(platform?: string): boolean {
     transform: translate(-50%, -50%);
     background: #222;
     border-radius: 10px;
-    padding: 30px;
+    padding: 30px 40px;
     overflow: auto;
-    max-width: 90vw;
-    max-height: 90vh;
+    width: 95vw;
+    max-width: 1400px;
+    max-height: 95vh;
 }
 
 .cartridge-grid {
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: 20px;
     width: 100%;
-    max-width: 900px;
-    padding: 20px;
+    max-width: 1300px;
+    padding: 15px;
 }
 
 .cartridge-row {
     display: flex;
     justify-content: center;
-    gap: 30px;
+    gap: 15px;
     flex-wrap: wrap;
+}
+
+.scott-section {
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 15px;
+    border-top: 2px solid #444;
+    text-align: center;
+}
+
+.scott-header {
+    color: #ffffff;
+    font-family: 'TitanOne', 'Arial Black', sans-serif;
+    font-size: 1.5rem;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.scott-row {
+    margin-top: 0;
 }
 
 h1 {
