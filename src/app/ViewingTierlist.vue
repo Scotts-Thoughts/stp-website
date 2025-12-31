@@ -291,8 +291,8 @@ onKeyDown('Escape', (e) => {
     display: inline-block;
     text-align: center;
     
-    /* Scale to fit viewport when not exporting */
-    transform-origin: top left;
+    /* Scale from center for proper centering */
+    transform-origin: center center;
 }
 
 /* Responsive scaling for viewing - center and scale to fit */
@@ -300,8 +300,7 @@ onKeyDown('Escape', (e) => {
     position: fixed;
     top: 50%;
     left: 50%;
-    /* Use CSS custom properties calculated via JavaScript for proper scaling */
-    --scale-x: min(100vw, 100vh * 1.778);
+    /* Center the element, then scale from its center */
     transform: translate(-50%, -50%) scale(var(--viewport-scale, 0.5));
 }
 

@@ -24,3 +24,4 @@ contextBridge.exposeInMainWorld('electronFS', {
 // Indicate that we're running in Electron
 contextBridge.exposeInMainWorld('isElectron', true)
 
+

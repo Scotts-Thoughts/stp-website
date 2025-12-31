@@ -66,6 +66,9 @@ function createWindow(): void {
     autoHideMenuBar: true, // Hide menu bar by default (Alt to show)
   })
 
+  // Lock to 16:9 aspect ratio
+  mainWindow.setAspectRatio(16 / 9)
+
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
