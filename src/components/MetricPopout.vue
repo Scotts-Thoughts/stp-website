@@ -30,7 +30,6 @@ function updatePosition() {
     
     // Get actual popout dimensions if available
     const popoutRect = popoutRef.value?.getBoundingClientRect();
-    const popoutWidth = popoutRect?.width ?? 280;
     const popoutHeight = popoutRect?.height ?? 200;
     
     // Center horizontally on the parent element
