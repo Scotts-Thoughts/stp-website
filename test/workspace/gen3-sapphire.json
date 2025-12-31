@@ -1,0 +1,26 @@
+{
+  "name": "Gen 3 - Sapphire Tierlist",
+  "game": "Sapphire",
+  "total": [386],
+  "thresholds_first": {
+    "realtime": [
+      {"label": "default", "data": ["1:30:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00", "2:20:00.00", "2:40:00.00", "3:00:00.00", "3:30:00.00"]}
+    ],
+    "gametime": [
+      {"label": "default", "data": ["6:30:00", "7:00:00", "7:30:00", "8:00:00", "8:30:00", "9:00:00", "10:00:00", "13:00:00"]},
+    ]
+  },
+  "thresholds_best": {
+    "realtime": [
+      {"label": "default   ", "data": ["1:10:00.00", "1:15:00.00", "1:20:00.00", "1:25:00.00", "1:30:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00"]}
+    ],
+    "gametime": [
+      {"label": "default   ", "data": ["6:30:00", "7:00:00", "7:30:00", "8:00:00", "8:30:00", "9:00:00", "10:00:00", "13:00:00"]}
+    ]
+  },
+  "platform": "Game Boy Advance",
+  "cartridgeImage": "/images/cartridges/3-sapphire.png",
+  "visible": true,
+  "finalTierLabel": "Impossible",
+  "entries": {}
+}
