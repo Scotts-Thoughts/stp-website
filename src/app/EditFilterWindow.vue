@@ -33,7 +33,7 @@ const centeredPosition = computed(() => {
 });
 
 async function selectFolder() {
-    const result = await fileexporter.selectFolder(true);
+    const result = await fileexporter.selectFolder();
     console.log(result);
 }
 

@@ -21,42 +21,8 @@ export const useFileExporter = defineStore("file-exporter", () => {
         return filesystem.value !== undefined ? filesystem.value.rootName : undefined;
     });
 
-    async function figureFilePrefix() {
-        let entries: Array<{ name: string; kind: string }> = [];
-        
-        if (isElectron() && electronExportPath.value && window.electronDialog) {
-            entries = await window.electronDialog.listExportFolder(electronExportPath.value);
-        } else if (filesystem.value) {
-            entries = await filesystem.value.getDirEntries("");
-        } else {
-            return "";
-        }
-
-        // find all files that end with "-\d+.png"
-        const files = [];
-        for (const entry of entries) {
-            if (entry.kind === "directory") continue;
-            const match = entry.name.match(/\-\d+\.png$/);
-            if (match) {
-                files.push({
-                    name: entry.name,
-                    num: parseInt(match[0].slice(1, -4), 10)
-                });
-            }
-        }
-        // if no files found, the user has to provide a prefix
-        if (files.length === 0) {
-            return "";
-        }
-        // sort the files by the number in the filename
-        files.sort((a, b) => a.num - b.num);
-        // return the prefix of the file with the highest number
-        const last = files[files.length - 1];
-        return last.name.match(/^(.*)\-\d+\.png$/)?.[1] ?? "";
-    }
-
-    async function figureNextFileIndex() {
-        if (filePrefix.value === "") return -1;
+    async function figureNextFileIndex(prefix: string) {
+        if (prefix === "") return -1;
         
         let entries: Array<{ name: string; kind: string }> = [];
         
@@ -72,7 +38,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
         // find all files with the given prefix
         for (const entry of entries) {
             if (entry.kind === "directory") continue;
-            if (entry.name.startsWith(filePrefix.value) && entry.name.endsWith(".png")) {
+            if (entry.name.startsWith(prefix) && entry.name.endsWith(".png")) {
                 files.push(entry.name);
             }
         }
@@ -82,10 +48,38 @@ export const useFileExporter = defineStore("file-exporter", () => {
         }
         // extract the number from the filenames
         const nums = files
-            .map(file => parseInt(file.slice(filePrefix.value.length + 1, -4)))
+            .map(file => parseInt(file.slice(prefix.length + 1, -4)))
             .filter(num => !isNaN(num));
         // find the highest number and add 1 and return it
         return Math.max(...nums) + 1;
+    }
+    
+    function generateFilePrefix(): string {
+        const tierlist = useTierlist();
+        const name = tierlist.activeTierlist.name;
+        const game = tierlist.activeTierlist.game;
+        const category = tierlist.activeCategory === "first" ? "first" : "followup";
+        
+        // Extract generation from tierlist name (e.g., "Gen 1 - Yellow" -> "gen1")
+        // or from the game name pattern
+        let generation = "";
+        const genMatch = name.match(/gen\s*(\d+)/i);
+        if (genMatch) {
+            generation = `gen${genMatch[1]}`;
+        } else {
+            // Fallback: try to infer from game name
+            const gameToGen: Record<string, string> = {
+                "red": "gen1", "blue": "gen1", "yellow": "gen1", "green": "gen1",
+                "gold": "gen2", "silver": "gen2", "crystal": "gen2",
+                "ruby": "gen3", "sapphire": "gen3", "emerald": "gen3", "firered": "gen3", "leafgreen": "gen3",
+                "diamond": "gen4", "pearl": "gen4", "platinum": "gen4", "heartgold": "gen4", "soulsilver": "gen4",
+                "black": "gen5", "white": "gen5", "black2": "gen5", "white2": "gen5",
+            };
+            generation = gameToGen[game.toLowerCase()] || "gen0";
+        }
+        
+        // Format: gen1-yellow-first or gen1-yellow-followup
+        return `${generation}-${game.toLowerCase()}-${category}`;
     }
 
     function unloadFolder() {
@@ -94,7 +88,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
         filePrefix.value = "";
     }
 
-    async function selectFolder(askForPrefix: boolean = false) {
+    async function selectFolder() {
         // if export is in progress, do nothing
         if (exportInProgress.value) {
             return Result.failure("Export currently in progress");
@@ -118,16 +112,6 @@ export const useFileExporter = defineStore("file-exporter", () => {
             filesystem.value = result.data;
         }
         
-        if (!askForPrefix) return Result.success(undefined);
-        
-        // Auto-generate prefix from existing files or tierlist name
-        let prefix = await figureFilePrefix();
-        if (prefix === "") {
-            // Generate prefix from tierlist name: "Gen 1 - Yellow Tierlist" -> "gen_1_-_yellow_tierlist"
-            prefix = tierlist.activeTierlist.name.toLocaleLowerCase().replace(/\s+/g, "_");
-        }
-        filePrefix.value = prefix;
-
         return Result.success(undefined);
     }
 
@@ -146,7 +130,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
             : !filesystem.value;
             
         if (needsFolderSelection) {
-            const result = await selectFolder(true);
+            const result = await selectFolder();
             if (!result.success) {
                 exportInProgress.value = false;
                 cb?.(result.message, "error");
@@ -155,18 +139,15 @@ export const useFileExporter = defineStore("file-exporter", () => {
         }
         exportInProgress.value = true;
         
-        const index = await figureNextFileIndex();
-        if (filePrefix.value === "") {
-            cb?.("No file prefix set", "error");
-            exportInProgress.value = false;
-            return;
-        }
+        // Generate filename based on current tierlist: gen1-yellow-first-001.png
+        const currentPrefix = generateFilePrefix();
+        const index = await figureNextFileIndex(currentPrefix);
         if (index === -1) {
             cb?.("Failed to determine next file index", "error");
             exportInProgress.value = false;
             return;
         }
-        const filename = `${filePrefix.value}-${index.toString().padStart(3, '0')}.png`;
+        const filename = `${currentPrefix}-${index.toString().padStart(3, '0')}.png`;
 
         cb?.(`Exporting...`, "start");
 
