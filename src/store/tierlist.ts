@@ -106,6 +106,10 @@ export const useTierlist = defineStore("tierlist", () => {
         const releaseDateTresh = parseDate(releaseDateTreshold.value);
         const list = [];
         for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
+            // Skip entries with no attempts
+            if (entry.attempts.length === 0) {
+                continue;
+            }
             const attempt = entry.attempts[0];
             // only include attempts that are before the release date treshold
             if (attempt.releasedate > releaseDateTresh) {

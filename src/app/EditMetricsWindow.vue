@@ -60,7 +60,12 @@ function populateData() {
         pokemon.value = tierlist.activePkmn;
         attemptIndex.value = 0;
         maxAttemptIndex.value = entry.attempts.length;
-        if (maxAttemptIndex.value === 0) return;
+    }
+
+    // Check if there are no attempts after updating maxAttemptIndex
+    if (entry.attempts.length === 0) {
+        maxAttemptIndex.value = 0;
+        return;
     }
 
     const attempt = entry.attempts[attemptIndex.value] ?? {
@@ -141,6 +146,34 @@ function updateMetric() {
     attempt.resets = parseInt(resets.value);
     attempt.blackouts = parseInt(blackouts.value);
 }
+
+function deleteRun() {
+    if (!confirm("Would you really like to delete this run's data?")) {
+        return;
+    }
+
+    const activeTierlist = tierlist.activeTierlist;
+    const entry = activeTierlist.entries[pokemon.value];
+
+    if (entry === undefined) {
+        console.error("Entry not found", pokemon.value);
+        return;
+    }
+
+    // Remove the attempt at the current index
+    entry.attempts.splice(attemptIndex.value, 1);
+    
+    // Update maxAttemptIndex
+    maxAttemptIndex.value = entry.attempts.length;
+    
+    // Adjust attemptIndex if needed (if we deleted the last item, move back)
+    if (attemptIndex.value >= maxAttemptIndex.value) {
+        attemptIndex.value = maxAttemptIndex.value > 0 ? maxAttemptIndex.value - 1 : 0;
+    }
+    
+    // Repopulate the form with the new current attempt (or show empty state if no attempts left)
+    populateData();
+}
 </script>
 
 
@@ -206,6 +239,7 @@ function updateMetric() {
                     <button @click="decIndex()">&lt;</button>
                     {{ attemptIndex+1 }}/{{ maxAttemptIndex }}
                     <button @click="incIndex()">&gt;</button>
+                    <button class="delete-btn" @click="deleteRun()" title="Delete this run">🗑</button>
                 </td>
                 <td><button class="sumbit" @click="updateMetric()">Update</button></td>
             </tr>
@@ -242,6 +276,18 @@ button.sumbit {
     padding: 5px 10px;
     height: 30px;
     width: 100%;
+}
+button.delete-btn {
+    padding: 5px 8px;
+    height: 30px;
+    margin-left: 5px;
+    background-color: #d32f2f;
+    color: white;
+    border: 1px solid #b71c1c;
+    cursor: pointer;
+}
+button.delete-btn:hover {
+    background-color: #b71c1c;
 }
 input:invalid {
     background-color: #f004;

@@ -35,14 +35,30 @@ export const useWorkspace = defineStore("workspace", () => {
 
     const activeTierlistIndex = ref(-1);
     
+    // Backup storage for tierlist entries (keyed by filename)
+    // Used to restore deleted runs if tierlist is closed without saving
+    const tierlistBackups = ref<Map<string, string>>(new Map());
+    
     // Check if running in Electron
     const runningInElectron = isElectron();
 
     function setActiveTierlist(newIndex: number) {
+        // When closing a tierlist (newIndex === -1), restore from backup if it exists
+        // This ensures unsaved deletions are reverted when closing
+        if (newIndex === -1 && activeTierlistIndex.value >= 0 && activeTierlistIndex.value < tierlists.value.length) {
+            const currentTierlist = tierlists.value[activeTierlistIndex.value];
+            restoreTierlistEntries(currentTierlist.filename, currentTierlist);
+        }
+        
         if (newIndex >= tierlists.value.length) {
             activeTierlistIndex.value = -1;
         } else {
             activeTierlistIndex.value = newIndex;
+            // When opening a tierlist, also restore from backup as a safeguard
+            if (newIndex >= 0) {
+                const tierlist = tierlists.value[newIndex];
+                restoreTierlistEntries(tierlist.filename, tierlist);
+            }
         }
     }
 
@@ -149,6 +165,9 @@ export const useWorkspace = defineStore("workspace", () => {
         settings.value = JSON.parse(await fs.read("settings.json"));
         pokemonSettings.value = JSON.parse(await fs.read("pokemon.json")) as PokemonSettings;
 
+        // Clear existing backups since we're reloading from disk
+        tierlistBackups.value.clear();
+
         // load tierlists
         tierlists.value = [];
         for (const entry of (await fs.getDirEntries("/"))) {
@@ -172,6 +191,8 @@ export const useWorkspace = defineStore("workspace", () => {
             }
             tierlist.filename = entry.name;
             tierlists.value.push(tierlist);
+            // Create backup from the file state (before any edits)
+            backupTierlistEntries(tierlist.filename, tierlist);
         }
 
         // sort tierlists by name
@@ -187,12 +208,95 @@ export const useWorkspace = defineStore("workspace", () => {
         await Promise.all([
             fs.write("settings.json", stringify(settings.value, { maxLength: 150 })),
             fs.write("pokemon.json", stringify(pokemonSettings.value, { maxLength: 150 })),
-            ...tierlists.value.map(tierlist =>
-                fs.write(tierlist.filename, stringifyTierlist(tierlist))
-            )
+            ...tierlists.value.map(tierlist => {
+                // Update backup after saving
+                backupTierlistEntries(tierlist.filename, tierlist);
+                return fs.write(tierlist.filename, stringifyTierlist(tierlist));
+            })
         ]);
 
         return Result.success(undefined);
+    }
+
+    // Backup tierlist entries to restore if closed without saving
+    function backupTierlistEntries(filename: string, tierlist: Tierlist) {
+        const entriesRaw: any = {};
+        for (const [pkmnName, entry] of Object.entries(tierlist.entries)) {
+            const entryRaw: any = {
+                numAttempts: entry.numAttempts,
+                numFinishes: entry.numFinishes,
+                tags: entry.tags.slice(),
+                attempts: []
+            };
+            
+            for (const attempt of entry.attempts) {
+                const attemptRaw: any = {
+                    finished: attempt.finished === 1,
+                    releasedate: formatDate(attempt.releasedate)
+                };
+                
+                for (const key of METRIC_TIME_KEYS) {
+                    if (attempt[key] !== -1) {
+                        attemptRaw[key] = METRIC[key].formatValue!(attempt[key]);
+                    }
+                }
+                
+                for (const key of METRIC_NUMBER_KEYS) {
+                    if (attempt[key] !== -1) {
+                        attemptRaw[key] = attempt[key];
+                    }
+                }
+                
+                entryRaw.attempts.push(attemptRaw);
+            }
+            
+            entriesRaw[pkmnName] = entryRaw;
+        }
+        
+        tierlistBackups.value.set(filename, JSON.stringify(entriesRaw));
+    }
+
+    // Restore tierlist entries from backup
+    function restoreTierlistEntries(filename: string, tierlist: Tierlist) {
+        const backup = tierlistBackups.value.get(filename);
+        if (!backup) {
+            // No backup exists (shouldn't happen if loadWorkspace was called, but handle it)
+            return;
+        }
+        
+        // Restore from backup (revert unsaved changes like deletions)
+        const entriesRaw = JSON.parse(backup);
+        tierlist.entries = {};
+        
+        for (const [pkmnName, entryRaw] of Object.entries<any>(entriesRaw)) {
+            const entry = {} as TierlistEntry;
+            tierlist.entries[pkmnName] = entry;
+            
+            entry.numAttempts = entryRaw.numAttempts ?? -1;
+            entry.numFinishes = entryRaw.numFinishes ?? -1;
+            entry.tags = entryRaw.tags ?? [];
+            
+            entry.attempts = [];
+            for (const attemptRaw of entryRaw.attempts) {
+                const attempt = {} as Metrics;
+                entry.attempts.push(attempt);
+                
+                attempt.releasedate = parseDate(attemptRaw.releasedate);
+                attempt.finished = attemptRaw.finished === true ? 1 : attemptRaw.finished === false ? 0 : -1;
+                
+                for (const key of METRIC_TIME_KEYS) {
+                    attempt[key] = attemptRaw[key] !== undefined ? parseTime(attemptRaw[key]) : -1;
+                }
+                
+                for (const key of METRIC_NUMBER_KEYS) {
+                    attempt[key] = attemptRaw[key] ?? -1;
+                }
+                
+                // Calculate derived metrics
+                attempt.faults = () => addMetrics(attempt.resets!, attempt.blackouts!);
+                attempt.faults_0 = () => addMetrics(attempt.resets_0!, attempt.blackouts_0!);
+            }
+        }
     }
 
     return {

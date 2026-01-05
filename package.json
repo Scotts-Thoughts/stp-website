@@ -1,7 +1,7 @@
 {
   "name": "pokemon-tierlist-creator",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.6.1",
   "description": "A tierlist creator for ranking Pokemon solo challenge playthroughs",
   "main": "dist-electron/main.js",
   "type": "module",
