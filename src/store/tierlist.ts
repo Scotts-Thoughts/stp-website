@@ -23,6 +23,13 @@ export type Tierlist = {
     brunoTierImage?: string
     cartridgeImage?: string
     visible?: boolean
+    sTierLabel?: string
+    aTierLabel?: string
+    bTierLabel?: string
+    cTierLabel?: string
+    dTierLabel?: string
+    eTierLabel?: string
+    fTierLabel?: string
 }
 
 export type TierlistEntry = {

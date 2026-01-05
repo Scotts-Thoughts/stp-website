@@ -2,12 +2,28 @@
 import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
-import { useGlobal, useTierlist, useFileExporter, CreditMode } from '../store';
+import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
+import { parseTime, formatTimeHMS } from '../utils/time';
+
+const enum TierlistTierIndex {
+    S = 0,
+    A = 1,
+    B = 2,
+    C = 3,
+    D = 4,
+    E = 5,
+    F = 6,
+    Surge = 7,
+    Bruno = 8,
+    Impossible = 9,
+}
 
 const global = useGlobal();
 const tierlist = useTierlist();
 const fileexporter = useFileExporter();
+const toast = useToast();
+const workspace = useWorkspace();
 
 // Track scroll state for each tier row
 const tierScrollState = reactive<Record<number, { 
@@ -240,13 +256,13 @@ onUnmounted(() => {
 });
 
 const tierData = computed(() => [
-    { name: "S" },
-    { name: "A" },
-    { name: "B" },
-    { name: "C" },
-    { name: "D" },
-    { name: "E" },
-    { name: "F" },
+    { name: tierlist.activeTierlist.sTierLabel || "S" },
+    { name: tierlist.activeTierlist.aTierLabel || "A" },
+    { name: tierlist.activeTierlist.bTierLabel || "B" },
+    { name: tierlist.activeTierlist.cTierLabel || "C" },
+    { name: tierlist.activeTierlist.dTierLabel || "D" },
+    { name: tierlist.activeTierlist.eTierLabel || "E" },
+    { name: tierlist.activeTierlist.fTierLabel || "F" },
     { 
         name: tierlist.activeTierlist.surgeTierLabel || "Surge", 
         image: tierlist.activeTierlist.surgeTierImage || "./images/surge.png" 
@@ -285,6 +301,189 @@ function unselectAll() {
 }
 
 onUnmounted(unselectAll)
+
+// Threshold editing state
+const editingThresholdIndex = ref<number | null>(null);
+const editingThresholdOriginalValue = ref<number | null>(null);
+const editingThresholdInputValue = ref<string>('');
+
+// Check if current metric supports H:MM:SS editing
+const isTimeMetricEditable = computed(() => {
+    const metric = tierlist.activeMetric;
+    return metric === 'realtime' || metric === 'realtime_0';
+});
+
+// Start editing a threshold
+function startEditingThreshold(tierIndex: number) {
+    if (!isTimeMetricEditable.value) return;
+    if (tierIndex === TierlistTierIndex.Impossible) return; // Can't edit "Can't Finish"
+    
+    const threshold = tierlist.activeThresholdList?.[tierlist.activeThresholdIndex]?.data;
+    if (!threshold) return;
+    
+    let thresholdValue: number;
+    if (tierIndex === TierlistTierIndex.Bruno) {
+        // Bruno uses the Surge threshold value
+        thresholdValue = threshold[TierlistTierIndex.Surge];
+    } else {
+        thresholdValue = threshold[tierIndex];
+    }
+    
+    editingThresholdIndex.value = tierIndex;
+    editingThresholdOriginalValue.value = thresholdValue;
+    editingThresholdInputValue.value = formatTimeHMS(thresholdValue, false);
+    
+    // Auto-focus and select text on next tick
+    nextTick(() => {
+        const input = document.querySelector('.threshold-input') as HTMLInputElement;
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    });
+}
+
+// Cancel editing and revert to original value
+function cancelEditingThreshold() {
+    editingThresholdIndex.value = null;
+    editingThresholdOriginalValue.value = null;
+    editingThresholdInputValue.value = '';
+}
+
+// Validate and save threshold value
+function saveThresholdValue() {
+    if (editingThresholdIndex.value === null) return;
+    
+    const tierIndex = editingThresholdIndex.value;
+    const inputValue = editingThresholdInputValue.value.trim();
+    
+    // Validate H:MM:SS format
+    const hmmssPattern = /^\d+:\d{2}:\d{2}$/;
+    if (!hmmssPattern.test(inputValue)) {
+        toast.addToast('Invalid time format. Please use H:MM:SS format.', 'error');
+        cancelEditingThreshold();
+        return;
+    }
+    
+    // Parse the time
+    let newValue: number;
+    try {
+        newValue = parseTime(inputValue);
+        if (newValue < 0) {
+            throw new Error('Invalid time value');
+        }
+    } catch (error) {
+        toast.addToast('Invalid time format. Please use H:MM:SS format.', 'error');
+        cancelEditingThreshold();
+        return;
+    }
+    
+    // Update the threshold value
+    const thresholdList = tierlist.activeThresholdList;
+    if (!thresholdList) {
+        cancelEditingThreshold();
+        return;
+    }
+    
+    const threshold = thresholdList[tierlist.activeThresholdIndex];
+    if (!threshold) {
+        cancelEditingThreshold();
+        return;
+    }
+    
+    if (tierIndex === TierlistTierIndex.Bruno) {
+        // Bruno uses the Surge threshold value
+        threshold.data[TierlistTierIndex.Surge] = newValue;
+    } else {
+        threshold.data[tierIndex] = newValue;
+    }
+    
+    cancelEditingThreshold();
+}
+
+// Handle input keydown events
+function handleThresholdInputKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        saveThresholdValue();
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditingThreshold();
+    }
+}
+
+// Tier label editing state
+const editingTierLabelIndex = ref<number | null>(null);
+const editingTierLabelInputValue = ref<string>('');
+
+// Property names for tier labels (S-F only, indices 0-6)
+const tierLabelProperties = ['sTierLabel', 'aTierLabel', 'bTierLabel', 'cTierLabel', 'dTierLabel', 'eTierLabel', 'fTierLabel'] as const;
+const defaultTierLabels = ['S', 'A', 'B', 'C', 'D', 'E', 'F'] as const;
+
+// Start editing a tier label (only for S-F, indices 0-6)
+function startEditingTierLabel(tierIndex: number) {
+    if (tierIndex < 0 || tierIndex > 6) return; // Only allow S-F tiers
+    
+    editingTierLabelIndex.value = tierIndex;
+    const propertyName = tierLabelProperties[tierIndex];
+    const currentValue = tierlist.activeTierlist[propertyName];
+    editingTierLabelInputValue.value = currentValue || defaultTierLabels[tierIndex];
+    
+    // Auto-focus and select text on next tick
+    nextTick(() => {
+        const input = document.querySelector(`.category.tier-${tierIndex} .label-input`) as HTMLInputElement;
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    });
+}
+
+// Cancel editing and revert to original value
+function cancelEditingTierLabel() {
+    editingTierLabelIndex.value = null;
+    editingTierLabelInputValue.value = '';
+}
+
+// Validate and save tier label value
+function saveTierLabelValue() {
+    if (editingTierLabelIndex.value === null) return;
+    
+    const tierIndex = editingTierLabelIndex.value;
+    const inputValue = editingTierLabelInputValue.value.trim();
+    
+    // Validate 1-2 characters
+    if (inputValue.length < 1 || inputValue.length > 2) {
+        toast.addToast('Tier label must be 1-2 characters.', 'error');
+        cancelEditingTierLabel();
+        return;
+    }
+    
+    // Update the tier label
+    const propertyName = tierLabelProperties[tierIndex];
+    if (inputValue === defaultTierLabels[tierIndex]) {
+        // If it's the default value, delete the property to use fallback
+        delete tierlist.activeTierlist[propertyName];
+    } else {
+        (tierlist.activeTierlist as any)[propertyName] = inputValue;
+    }
+    
+    // Save workspace to persist changes
+    workspace.saveWorkspace();
+    
+    cancelEditingTierLabel();
+}
+
+// Handle input keydown events for tier label
+function handleTierLabelInputKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        saveTierLabelValue();
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditingTierLabel();
+    }
+}
 
 </script>
 
@@ -334,7 +533,22 @@ onUnmounted(unselectAll)
     >
         <template v-for="(group, i) in data.groups" >
             <div :class="'category rounded tier-' + i + (global.hidden ? ' pending' : '')">
-                <div class="label">{{ tierData[i].name }}</div>
+                <div 
+                    v-if="editingTierLabelIndex !== i"
+                    class="label"
+                    :class="{ 'label-editable': i <= 6 }"
+                    @click.stop="startEditingTierLabel(i)"
+                >{{ tierData[i].name }}</div>
+                <input
+                    v-else
+                    v-model="editingTierLabelInputValue"
+                    class="label-input"
+                    @blur="saveTierLabelValue"
+                    @keydown="handleTierLabelInputKeydown"
+                    @click.stop
+                    autofocus
+                    maxlength="2"
+                />
                 <img v-if="tierData[i].image"
                     class="image" :src="tierData[i].image" />
             </div>
@@ -380,7 +594,21 @@ onUnmounted(unselectAll)
                     </PkmnImage>
                 </div>
                 <!-- Threshold label -->
-                <div class="threshold-label">{{ data.labels[i] }}</div>
+                <div 
+                    v-if="editingThresholdIndex !== i"
+                    class="threshold-label"
+                    :class="{ 'threshold-label-editable': isTimeMetricEditable && i !== 9 }"
+                    @click.stop="startEditingThreshold(i)"
+                >{{ data.labels[i] }}</div>
+                <input
+                    v-else
+                    v-model="editingThresholdInputValue"
+                    class="threshold-input"
+                    @blur="saveThresholdValue"
+                    @keydown="handleThresholdInputKeydown"
+                    @click.stop
+                    autofocus
+                />
                 <!-- Left fade overlay -->
                 <div 
                     v-if="tierScrollState[i]?.canScroll && tierScrollState[i]?.left > 0"
@@ -474,6 +702,45 @@ onUnmounted(unselectAll)
     position: absolute;
     inset: 0;
     text-align: center;
+}
+
+.category .label.label-editable {
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.category .label.label-editable:hover {
+    opacity: 0.7;
+}
+
+.category .label-input {
+    position: absolute;
+    inset: 0;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 11px;
+    font-size: 106px;
+    line-height: 1.05em;
+    color: #000000;
+    font-weight: 700;
+    font-family: inherit;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+}
+
+.category .label-input:focus {
+    border-color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.category.tier-9 .label-input {
+    font-size: 26px;
+    transform: rotate(-40deg) translate(-4px, -7px);
 }
 
 /* Wrapper for entry row with fade effects */
@@ -597,6 +864,51 @@ onUnmounted(unselectAll)
 }
 
 /* Threshold label - positioned via wrapper */
+.entry-row-wrapper .threshold-label {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    transform: translateY(-50%);
+    z-index: 6;
+    pointer-events: none;
+}
+
+.entry-row-wrapper .threshold-label.threshold-label-editable {
+    pointer-events: auto;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.entry-row-wrapper .threshold-label.threshold-label-editable:hover {
+    opacity: 0.6;
+}
+
+.entry-row-wrapper .threshold-input {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    transform: translateY(-50%);
+    z-index: 7;
+    pointer-events: auto;
+    
+    font-size: 30px;
+    color: #ffffff;
+    font-weight: 700;
+    font-family: 'Play', sans-serif;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 5px;
+    padding: 4px 8px;
+    outline: none;
+    min-width: 100px;
+    text-align: center;
+}
+
+.entry-row-wrapper .threshold-input:focus {
+    border-color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.7);
+}
+
 .entry-row-wrapper .threshold-label {
     position: absolute;
     top: 50%;

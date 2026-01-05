@@ -25,6 +25,14 @@ class FS {
      */
     static async create(id: string, cacheHandle = false) {
         try {
+            // Check if File System Access API is available
+            if (typeof window === 'undefined' || !window.showDirectoryPicker) {
+                return Result.failure(
+                    "File System Access API is not available. " +
+                    "Please use a supported browser (Chrome, Edge) or enable the API in Brave browser settings."
+                );
+            }
+
             const key = 'fs-api-handles__' + id;
 
             if (cacheHandle && await this.checkHandleCached(id)) {
@@ -32,8 +40,11 @@ class FS {
                 return Result.success(new FS(cachedRootHandle!));
             }
 
+            // Ensure we're calling from a user gesture context
+            // This is important for Brave browser compatibility
             const rootHandle = await window.showDirectoryPicker({
-                id, mode: "readwrite"
+                id, 
+                mode: "readwrite"
             });
 
             if (cacheHandle) {
@@ -42,7 +53,25 @@ class FS {
 
             return Result.success(new FS(rootHandle));
         } catch (e) {
-            return Result.failure("User cancelled directory picker. " + e);
+            const error = e instanceof Error ? e : new Error(String(e));
+            const errorMessage = error.message || String(e);
+            
+            // Provide more specific error messages for common issues
+            if (errorMessage.includes('AbortError') || errorMessage.includes('cancel')) {
+                return Result.failure("Directory picker was cancelled.");
+            } else if (errorMessage.includes('NotAllowedError') || errorMessage.includes('permission')) {
+                return Result.failure(
+                    "Permission denied. Brave browser may have blocked the folder picker. " +
+                    "Please check your browser settings and allow file system access, or try clicking the button again."
+                );
+            } else if (errorMessage.includes('user activation') || errorMessage.includes('gesture')) {
+                return Result.failure(
+                    "User interaction required. Please click the button again. " +
+                    "Brave browser requires direct user interaction to open the folder picker."
+                );
+            } else {
+                return Result.failure(`Failed to open directory picker: ${errorMessage}`);
+            }
         }
     }
 

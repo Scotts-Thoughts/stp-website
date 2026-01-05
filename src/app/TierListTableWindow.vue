@@ -25,8 +25,8 @@ const TABLE_RANK_LABEL = computed(() => [
     "Tier D",
     "Tier E",
     "Tier F",
-    "Tier Surge",
-    "Tier Bruno",
+    "Tier " + (tierlist.activeTierlist.surgeTierLabel || "Surge"),
+    "Tier " + (tierlist.activeTierlist.brunoTierLabel || "Bruno"),
     (tierlist.activeTierlist.finalTierLabel || "Impossible") + " -",
 ]);
 

@@ -70,7 +70,7 @@ const pokemonForms: Record<string, string[]> = {
     "Zigzagoon" : ["Galarian"],
     "Linoone"   : ["Galarian"],
     "Darumaka"  : ["Galarian"],
-    "Darmanitan": ["Galarian"],
+    "Darmanitan": ["Standard Mode", "Zen Mode", "Galarian"],
     "Yamask"    : ["Galarian"],
     "Stunfisk"  : ["Galarian"],
       // Hisuian Forms

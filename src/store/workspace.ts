@@ -241,6 +241,18 @@ function parseTierlist(data: string): Tierlist | undefined {
     tierlist.platform = tierlistRaw.platform;
     tierlist.cartridgeImage = tierlistRaw.cartridgeImage;
     tierlist.visible = tierlistRaw.visible !== undefined ? tierlistRaw.visible : true;
+    tierlist.finalTierLabel = tierlistRaw.finalTierLabel;
+    tierlist.surgeTierLabel = tierlistRaw.surgeTierLabel;
+    tierlist.surgeTierImage = tierlistRaw.surgeTierImage;
+    tierlist.brunoTierLabel = tierlistRaw.brunoTierLabel;
+    tierlist.brunoTierImage = tierlistRaw.brunoTierImage;
+    tierlist.sTierLabel = tierlistRaw.sTierLabel;
+    tierlist.aTierLabel = tierlistRaw.aTierLabel;
+    tierlist.bTierLabel = tierlistRaw.bTierLabel;
+    tierlist.cTierLabel = tierlistRaw.cTierLabel;
+    tierlist.dTierLabel = tierlistRaw.dTierLabel;
+    tierlist.eTierLabel = tierlistRaw.eTierLabel;
+    tierlist.fTierLabel = tierlistRaw.fTierLabel;
 
     // copy over any custom keys
     for (const key of Object.keys(tierlistRaw)) {
@@ -335,6 +347,18 @@ function stringifyTierlist(tierlist: Tierlist): string {
     if (tierlist.platform) tierlistRaw.platform = tierlist.platform;
     if (tierlist.cartridgeImage) tierlistRaw.cartridgeImage = tierlist.cartridgeImage;
     if (tierlist.visible !== undefined) tierlistRaw.visible = tierlist.visible;
+    if (tierlist.finalTierLabel) tierlistRaw.finalTierLabel = tierlist.finalTierLabel;
+    if (tierlist.surgeTierLabel) tierlistRaw.surgeTierLabel = tierlist.surgeTierLabel;
+    if (tierlist.surgeTierImage) tierlistRaw.surgeTierImage = tierlist.surgeTierImage;
+    if (tierlist.brunoTierLabel) tierlistRaw.brunoTierLabel = tierlist.brunoTierLabel;
+    if (tierlist.brunoTierImage) tierlistRaw.brunoTierImage = tierlist.brunoTierImage;
+    if (tierlist.sTierLabel) tierlistRaw.sTierLabel = tierlist.sTierLabel;
+    if (tierlist.aTierLabel) tierlistRaw.aTierLabel = tierlist.aTierLabel;
+    if (tierlist.bTierLabel) tierlistRaw.bTierLabel = tierlist.bTierLabel;
+    if (tierlist.cTierLabel) tierlistRaw.cTierLabel = tierlist.cTierLabel;
+    if (tierlist.dTierLabel) tierlistRaw.dTierLabel = tierlist.dTierLabel;
+    if (tierlist.eTierLabel) tierlistRaw.eTierLabel = tierlist.eTierLabel;
+    if (tierlist.fTierLabel) tierlistRaw.fTierLabel = tierlist.fTierLabel;
 
     // copy over any custom keys
     for (const key of Object.keys(tierlist)) {
