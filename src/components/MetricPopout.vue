@@ -51,6 +51,35 @@ function updatePosition() {
     };
 }
 
+// Track previous parent position to detect changes
+let previousParentRect: DOMRect | null = null;
+let animationFrameId: number | null = null;
+let isWatching = false;
+
+function watchParentPosition() {
+    if (!isWatching || !anchorRef.value) return;
+    
+    const parent = anchorRef.value.parentElement;
+    if (!parent) {
+        animationFrameId = requestAnimationFrame(watchParentPosition);
+        return;
+    }
+    
+    const currentRect = parent.getBoundingClientRect();
+    if (previousParentRect) {
+        // Check if position changed (accounting for floating point precision)
+        if (Math.abs(currentRect.left - previousParentRect.left) > 0.1 ||
+            Math.abs(currentRect.top - previousParentRect.top) > 0.1 ||
+            Math.abs(currentRect.width - previousParentRect.width) > 0.1 ||
+            Math.abs(currentRect.height - previousParentRect.height) > 0.1) {
+            updatePosition();
+        }
+    }
+    previousParentRect = currentRect;
+    
+    animationFrameId = requestAnimationFrame(watchParentPosition);
+}
+
 // Update position when mounted and when pokemon changes
 onMounted(() => {
     nextTick(updatePosition);
@@ -60,11 +89,23 @@ onMounted(() => {
     });
     window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
+    
+    // Watch for viewport scale changes by checking parent position each frame
+    // This catches CSS transform changes that don't trigger resize events
+    isWatching = true;
+    watchParentPosition();
 });
 
 onUnmounted(() => {
     window.removeEventListener('scroll', updatePosition, true);
     window.removeEventListener('resize', updatePosition);
+    
+    isWatching = false;
+    if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    previousParentRect = null;
 });
 
 watch(() => props.pokemon, () => {

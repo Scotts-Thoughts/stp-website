@@ -685,6 +685,7 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     line-height: 1.05em;
     color: #000000;
     font-weight: 700;
+    font-family: 'Teko', sans-serif;
 
     color: black;
     overflow: hidden;
@@ -702,6 +703,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     position: absolute;
     inset: 0;
     text-align: center;
+    font-family: 'Teko', sans-serif;
+    font-weight: 700;
 }
 
 .category .label.label-editable {
@@ -724,7 +727,7 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     line-height: 1.05em;
     color: #000000;
     font-weight: 700;
-    font-family: inherit;
+    font-family: 'Teko', sans-serif;
     outline: none;
     padding: 0;
     margin: 0;
@@ -741,6 +744,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 .category.tier-9 .label-input {
     font-size: 26px;
     transform: rotate(-40deg) translate(-4px, -7px);
+    font-family: 'Teko', sans-serif;
+    font-weight: 700;
 }
 
 /* Wrapper for entry row with fade effects */
@@ -1006,6 +1011,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     padding-bottom: 2px;
     z-index: 10;
     opacity: 0;
+    font-family: 'Teko', sans-serif;
+    font-weight: 700;
 }
 
 .category.tier-7 .image,
@@ -1026,6 +1033,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 .category.tier-9 .label {
     transform: rotate(-40deg) translate(-4px, -7px);
     font-size: 26px;
+    font-family: 'Teko', sans-serif;
+    font-weight: 700;
 }
 
 .category.pending  {
@@ -1037,6 +1046,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 
     font-size: 106px;
     line-height: 1.05em;
+    font-family: 'Teko', sans-serif;
+    font-weight: 700;
 }
 .category.pending .image {
     display: none;

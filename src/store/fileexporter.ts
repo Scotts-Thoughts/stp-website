@@ -157,20 +157,171 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 // Wait for all fonts to be loaded before exporting
                 await document.fonts.ready;
                 
-                // Export options - let the element define its own dimensions (1920x1080 wrapper)
-                // Don't override width/height as this can break CSS grid layouts
+                // Wait for export state to be applied (exporting class on root)
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                // Wait a bit more to ensure all computed properties (like tier labels) are stable
+                // Force Vue to finish any pending updates
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                // Find teleported elements that need to be included in export
+                const appElement = document.getElementById('app');
+                const tableWindows = Array.from(appElement?.querySelectorAll('.tierlist-table-window:not(.hidden)') || []) as HTMLElement[];
+                const popovers = Array.from(document.body.querySelectorAll('.metric-popout') || []) as HTMLElement[];
+                
+                // Filter popovers that are actually visible
+                const visiblePopovers = popovers.filter(p => {
+                    const style = window.getComputedStyle(p);
+                    return style.visibility !== 'hidden' && style.display !== 'none';
+                });
+                
+                // Get root element's bounding rect BEFORE cloning (while it's in its final export state)
+                const rootRect = root.getBoundingClientRect();
+                
+                // Store original states for restoration
+                const elementRestoreData: Array<{
+                    element: HTMLElement;
+                    originalParent: Node | null;
+                    originalNextSibling: Node | null;
+                    originalStyle: string;
+                }> = [];
+                
+                // Create a wrapper container that will hold everything for export
+                const exportWrapper = document.createElement('div');
+                exportWrapper.style.position = 'relative';
+                exportWrapper.style.width = '1920px';
+                exportWrapper.style.height = '1080px';
+                exportWrapper.style.overflow = 'hidden';
+                exportWrapper.style.backgroundColor = 'transparent';
+                exportWrapper.style.fontFamily = "'Teko', sans-serif";
+                
+                // Clone the root element NOW - capture the current state of labels
+                // Use cloneNode with deep=true to preserve all text content including labels
+                const rootClone = root.cloneNode(true) as HTMLElement;
+                // Ensure exporting class is applied
+                rootClone.classList.add('exporting');
+                exportWrapper.appendChild(rootClone);
+                
+                // Append wrapper to body temporarily so we can measure positions
+                exportWrapper.style.position = 'fixed';
+                exportWrapper.style.left = '0';
+                exportWrapper.style.top = '0';
+                exportWrapper.style.zIndex = '999999';
+                document.body.appendChild(exportWrapper);
+                
+                // Wait for the cloned root to layout
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                // Clone and position teleported elements
+                [...tableWindows, ...visiblePopovers].forEach((element) => {
+                    const clone = element.cloneNode(true) as HTMLElement;
+                    const computedStyle = window.getComputedStyle(element);
+                    
+                    // Store original inline style for restoration
+                    elementRestoreData.push({
+                        element,
+                        originalParent: element.parentNode,
+                        originalNextSibling: element.nextSibling,
+                        originalStyle: element.style.cssText,
+                    });
+                    
+                    // For popovers, find the corresponding Pokemon element and calculate position
+                    if (element.classList.contains('metric-popout')) {
+                        // Find the Pokemon name from the popover content
+                        const pokemonNameElement = element.querySelector('.header h3');
+                        const pokemonName = pokemonNameElement?.textContent?.trim();
+                        
+                        if (pokemonName) {
+                            // Find the Pokemon element in the original DOM to get relative position
+                            const originalPkmnElement = root.querySelector(`[data-pokemon="${pokemonName}"]`) as HTMLElement;
+                            if (originalPkmnElement) {
+                                const originalPkmnRect = originalPkmnElement.getBoundingClientRect();
+                                const popoverRect = element.getBoundingClientRect();
+                                
+                                // Calculate position relative to root (which will be at 0,0 in exportWrapper)
+                                // The root is 1920x1080, so positions are relative to its top-left
+                                const pkmnCenterX = originalPkmnRect.left - rootRect.left + originalPkmnRect.width / 2;
+                                const popoverHeight = popoverRect.height;
+                                
+                                // Check if popover opens to top
+                                const openToTop = popoverRect.top < originalPkmnRect.top;
+                                
+                                clone.style.position = 'absolute';
+                                clone.style.left = `${pkmnCenterX}px`;
+                                
+                                if (openToTop) {
+                                    clone.style.top = `${originalPkmnRect.top - rootRect.top - popoverHeight - 16}px`;
+                                } else {
+                                    clone.style.top = `${originalPkmnRect.bottom - rootRect.top + 8}px`;
+                                }
+                                
+                                clone.style.transform = 'translateX(-50%)';
+                                clone.style.zIndex = computedStyle.zIndex || '10000';
+                                clone.style.margin = '0';
+                                clone.style.visibility = 'visible';
+                                
+                                exportWrapper.appendChild(clone);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // For table windows and popovers that couldn't find their Pokemon, use viewport coordinates
+                    const rect = element.getBoundingClientRect();
+                    clone.style.position = 'absolute';
+                    clone.style.left = `${rect.left - rootRect.left}px`;
+                    clone.style.top = `${rect.top - rootRect.top}px`;
+                    clone.style.transform = computedStyle.transform || '';
+                    clone.style.zIndex = computedStyle.zIndex || '200';
+                    clone.style.margin = '0';
+                    clone.style.visibility = 'visible';
+                    clone.classList.remove('hidden');
+                    
+                    exportWrapper.appendChild(clone);
+                });
+                
+                // Wait for layout to settle and ensure everything is rendered
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                // Ensure all fonts are loaded
+                await document.fonts.ready;
+                
+                // Copy computed font styles to inline styles for all text elements in the clone
+                // This ensures fonts are preserved during export
+                const allClonedElements = exportWrapper.querySelectorAll('*');
+                allClonedElements.forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+                    const computedStyle = window.getComputedStyle(htmlEl);
+                    
+                    // Copy font-related styles to ensure they're preserved
+                    htmlEl.style.fontFamily = computedStyle.fontFamily;
+                    htmlEl.style.fontSize = computedStyle.fontSize;
+                    htmlEl.style.fontWeight = computedStyle.fontWeight;
+                    htmlEl.style.fontStyle = computedStyle.fontStyle;
+                    htmlEl.style.fontVariant = computedStyle.fontVariant;
+                    htmlEl.style.letterSpacing = computedStyle.letterSpacing;
+                    htmlEl.style.textRendering = computedStyle.textRendering;
+                });
+                
+                // Wait for layout to settle after style changes
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
+                // Export options - ensure fonts are included
                 const exportOptions = {
                     backgroundColor: "transparent",
                     cacheBust: true,
                     pixelRatio: scale,
-                    // Ensure fonts are properly embedded in export
                     skipFonts: false,
                     preferredFontFormat: 'woff2',
                 };
                 
                 if (isElectron() && window.electronDialog && electronExportPath.value) {
                     // Use Electron's file system
-                    const dataUrl = await htmlToImage.toPng(root, exportOptions);
+                    const dataUrl = await htmlToImage.toPng(exportWrapper, exportOptions);
                     
                     const result = await window.electronDialog.saveFile(electronExportPath.value, filename, dataUrl);
                     if (!result.success) {
@@ -181,7 +332,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 } else {
                     // Use browser file system
                     const fs = filesystem.value!;
-                    const blob = await htmlToImage.toBlob(root, exportOptions);
+                    const blob = await htmlToImage.toBlob(exportWrapper, exportOptions);
         
                     if (blob) {
                         await fs.write(filename, blob);
@@ -198,6 +349,12 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 cb?.(`Exported [${index}] successfully in ${(time/1000).toFixed(3)}s`, "success");
             } catch (e) {
                 cb?.("Failed to write file: " + e, "error");
+            } finally {
+                // Clean up: remove the export wrapper
+                const wrapper = document.body.querySelector('div[style*="z-index: 999999"]');
+                if (wrapper && wrapper.parentElement) {
+                    wrapper.parentElement.removeChild(wrapper);
+                }
             }
     
             exportInProgress.value = false;
