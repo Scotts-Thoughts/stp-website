@@ -21,8 +21,8 @@ export const useFileExporter = defineStore("file-exporter", () => {
         return filesystem.value !== undefined ? filesystem.value.rootName : undefined;
     });
 
-    async function figureNextFileIndex(prefix: string) {
-        if (prefix === "") return -1;
+    async function figureNextFileIndex(timestampPrefix: string, game: string) {
+        if (timestampPrefix === "" || game === "") return -1;
         
         let entries: Array<{ name: string; kind: string }> = [];
         
@@ -35,23 +35,38 @@ export const useFileExporter = defineStore("file-exporter", () => {
         }
 
         const files = [];
-        // find all files with the given prefix
+        // find all files matching the pattern: YYYYMMDDHHMMSS-tierlist-${game}-*.png
+        const pattern = new RegExp(`^${timestampPrefix}-tierlist-${game.toLowerCase()}-(\\d+)\\.png$`);
         for (const entry of entries) {
             if (entry.kind === "directory") continue;
-            if (entry.name.startsWith(prefix) && entry.name.endsWith(".png")) {
+            if (pattern.test(entry.name)) {
                 files.push(entry.name);
             }
         }
-        // if no files found, return 0
+        // if no files found, return 1
         if (files.length === 0) {
-            return 0;
+            return 1;
         }
         // extract the number from the filenames
         const nums = files
-            .map(file => parseInt(file.slice(prefix.length + 1, -4)))
-            .filter(num => !isNaN(num));
+            .map(file => {
+                const match = file.match(pattern);
+                return match ? parseInt(match[1]) : 0;
+            })
+            .filter(num => !isNaN(num) && num > 0);
         // find the highest number and add 1 and return it
-        return Math.max(...nums) + 1;
+        return nums.length > 0 ? Math.max(...nums) + 1 : 1;
+    }
+    
+    function generateTimestamp(): string {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        return `${year}${month}${day}${hours}${minutes}${seconds}`;
     }
     
     function generateFilePrefix(): string {
@@ -139,15 +154,17 @@ export const useFileExporter = defineStore("file-exporter", () => {
         }
         exportInProgress.value = true;
         
-        // Generate filename based on current tierlist: gen1-yellow-first-001.png
-        const currentPrefix = generateFilePrefix();
-        const index = await figureNextFileIndex(currentPrefix);
-        if (index === -1) {
+        // Generate filename based on new format: YYYYMMDDHHMMSS-tierlist-${version}-${exportNumber}.png
+        const tierlist = useTierlist();
+        const game = tierlist.activeTierlist.game.toLowerCase();
+        const timestamp = generateTimestamp();
+        const exportNumber = await figureNextFileIndex(timestamp, game);
+        if (exportNumber === -1) {
             cb?.("Failed to determine next file index", "error");
             exportInProgress.value = false;
             return;
         }
-        const filename = `${currentPrefix}-${index.toString().padStart(3, '0')}.png`;
+        const filename = `${timestamp}-tierlist-${game}-${exportNumber}.png`;
 
         cb?.(`Exporting...`, "start");
 
@@ -346,7 +363,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 const timeEnd = performance.now();
                 const time = timeEnd - timeStart;
     
-                cb?.(`Exported [${index}] successfully in ${(time/1000).toFixed(3)}s`, "success");
+                cb?.(`Exported [${exportNumber}] successfully in ${(time/1000).toFixed(3)}s`, "success");
             } catch (e) {
                 cb?.("Failed to write file: " + e, "error");
             } finally {
