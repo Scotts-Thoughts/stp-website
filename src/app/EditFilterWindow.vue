@@ -88,10 +88,21 @@ async function selectFolder() {
             </tr>
 
             <tr>
+                <td><label for="filter-year">Release Year</label></td>
+                <td><DropdownSelect 
+                    id="filter-year"
+                    :options="tierlist.activeYearList"
+                    v-model="tierlist.includeYearList"
+                    height="200px"
+                /></td>
+            </tr>
+
+            <tr>
                 <td><label for="filter-category">Category</label></td>
                 <td><select id="filter-category" v-model="tierlist.activeCategory">
                     <option value="best">Best Attempt</option>
                     <option value="first">First Attempt</option>
+                    <option value="recent">Most Recent Attempt</option>
                 </select></td>
             </tr>
 

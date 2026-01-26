@@ -73,7 +73,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
         const tierlist = useTierlist();
         const name = tierlist.activeTierlist.name;
         const game = tierlist.activeTierlist.game;
-        const category = tierlist.activeCategory === "first" ? "first" : "followup";
+        const category = tierlist.activeCategory === "first" ? "first" : "followup"; // "best" and "recent" are both followup
         
         // Extract generation from tierlist name (e.g., "Gen 1 - Yellow" -> "gen1")
         // or from the game name pattern

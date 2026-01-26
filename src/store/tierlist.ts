@@ -57,7 +57,7 @@ export const useTierlist = defineStore("tierlist", () => {
 
     const activePkmn = ref<string>('');
     const activePrev = ref<string>('');
-    const activeCategory = ref<'first' | 'best'>('best');
+    const activeCategory = ref<'first' | 'best' | 'recent'>('best');
     const activeMetric = ref<MetricKeys>('realtime');
     const activeThresholdIndex = ref<number>(0);
     const activeTotalIndex = ref<number>(0);
@@ -68,6 +68,7 @@ export const useTierlist = defineStore("tierlist", () => {
     const excludeTagsList = ref<string[]>(["backports", "backport"]);
     const includeTypeList = ref<string[]>([]);
     const includeGrowthRateList = ref<string[]>([]);
+    const includeYearList = ref<string[]>([]);
     const releaseDateTreshold = ref<string>(currentDate());
 
     const activeTierlist = computed(() => workspace.activeTierlist);
@@ -101,6 +102,29 @@ export const useTierlist = defineStore("tierlist", () => {
         return includeGrowthRateList.value.includes(pokemonData.growth_rate);
     }
 
+    const filterByYear = (releasedate: number) => {
+        if (includeYearList.value.length === 0) return true;
+        const year = new Date(releasedate).getFullYear().toString();
+        return includeYearList.value.includes(year);
+    }
+
+    // Get all unique years from attempts in the active tierlist
+    const activeYearList = computed(() => {
+        const years = new Set<string>();
+        for (const entry of Object.values(activeTierlist.value.entries)) {
+            for (const attempt of entry.attempts) {
+                if (attempt.releasedate > 0) {
+                    const year = new Date(attempt.releasedate).getFullYear().toString();
+                    // Exclude placeholder years like 1970
+                    if (year !== "1970") {
+                        years.add(year);
+                    }
+                }
+            }
+        }
+        return Array.from(years).sort((a, b) => b.localeCompare(a)); // Most recent first
+    });
+
     const firstThresholds = computed(() => activeTierlist.value.thresholds_first);
     const firstAttempts = computed(() => {
         const releaseDateTresh = parseDate(releaseDateTreshold.value);
@@ -113,6 +137,10 @@ export const useTierlist = defineStore("tierlist", () => {
             const attempt = entry.attempts[0];
             // only include attempts that are before the release date treshold
             if (attempt.releasedate > releaseDateTresh) {
+                continue;
+            }
+            // filter by year
+            if (!filterByYear(attempt.releasedate)) {
                 continue;
             }
             // filter by type and growth rate
@@ -137,7 +165,7 @@ export const useTierlist = defineStore("tierlist", () => {
                 continue;
             }
             // only include attempts that are before the release date treshold
-            const attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
+            let attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
             // if none of the attempts are before the release date treshold, skip this entry
             if (attempts.length === 0) {
                 continue;
@@ -145,6 +173,13 @@ export const useTierlist = defineStore("tierlist", () => {
             // if only the first attempt is before the release date treshold, skip this entry
             if (attempts.length === 1 && attempts[0] === entry.attempts[0]) {
                 continue;
+            }
+            // filter by year (when year filter is active, consider all attempts within selected years)
+            if (includeYearList.value.length > 0) {
+                attempts = attempts.filter(attempt => filterByYear(attempt.releasedate));
+                if (attempts.length === 0) {
+                    continue;
+                }
             }
             // filter by type and growth rate
             if (!filterByType(pkmnName)) {
@@ -161,16 +196,61 @@ export const useTierlist = defineStore("tierlist", () => {
         return list;
     });
 
-    const activeThresholdList = computed(() =>
-        activeCategory.value === "first" ?
-            firstThresholds.value[activeMetric.value] :
-            bestTresholds.value[activeMetric.value]
-    );
-    const activeAttempts = computed(() =>
-        activeCategory.value === "first" ?
-            firstAttempts.value :
-            bestAttempts.value
-    );
+    const recentAttempts = computed(() => {
+        const releaseDateTresh = parseDate(releaseDateTreshold.value);
+        const list = [];
+        for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
+            // Skip entries with no attempts
+            if (entry.attempts.length === 0) {
+                continue;
+            }
+            // only include attempts that are before the release date treshold
+            let attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
+            // if none of the attempts are before the release date treshold, skip this entry
+            if (attempts.length === 0) {
+                continue;
+            }
+            // filter by year (when year filter is active, consider only attempts within selected years)
+            if (includeYearList.value.length > 0) {
+                attempts = attempts.filter(attempt => filterByYear(attempt.releasedate));
+                if (attempts.length === 0) {
+                    continue;
+                }
+            }
+            // filter by type and growth rate
+            if (!filterByType(pkmnName)) {
+                continue;
+            }
+            if (!filterByGrowthRate(pkmnName)) {
+                continue;
+            }
+            // get the most recent attempt by release date (sort descending and take first)
+            const sortedAttempts = [...attempts].sort((a, b) => b.releasedate - a.releasedate);
+            const attempt = sortedAttempts[0];
+            list.push({ pkmnName, attempt });
+        }
+        return list;
+    });
+
+    const activeThresholdList = computed(() => {
+        if (activeCategory.value === "first") {
+            return firstThresholds.value[activeMetric.value];
+        } else if (activeCategory.value === "recent") {
+            // Use best thresholds for recent attempts (both are followup attempts)
+            return bestTresholds.value[activeMetric.value];
+        } else {
+            return bestTresholds.value[activeMetric.value];
+        }
+    });
+    const activeAttempts = computed(() => {
+        if (activeCategory.value === "first") {
+            return firstAttempts.value;
+        } else if (activeCategory.value === "recent") {
+            return recentAttempts.value;
+        } else {
+            return bestAttempts.value;
+        }
+    });
     const activeFilteredAttempts = computed(() => {
         const filteredAttempts = [];
         for (const { pkmnName, attempt } of activeAttempts.value) {
@@ -203,8 +283,8 @@ export const useTierlist = defineStore("tierlist", () => {
 
     // Auto-fallback logic: if current category has no results, switch to the other category
     watch(() => activeFilteredAttempts.value, (newAttempts) => {
-        // Only auto-fallback if we're in "best" category and have no results
-        if (activeCategory.value === "best" && newAttempts.length === 0) {
+        // Auto-fallback if we're in "best" or "recent" category and have no results
+        if ((activeCategory.value === "best" || activeCategory.value === "recent") && newAttempts.length === 0) {
             // Check if "first" category has results by checking the entries directly
             const hasFirstAttempts = Object.values(activeTierlist.value.entries).some(entry => 
                 entry.attempts.some(attempt => attempt.finished)
@@ -313,6 +393,7 @@ export const useTierlist = defineStore("tierlist", () => {
         activeAttempts,
         activeFilteredAttempts,
         activeTagList,
+        activeYearList,
         releaseDateTreshold,
         selectedPkmn,
         excludePokemonList,
@@ -320,6 +401,7 @@ export const useTierlist = defineStore("tierlist", () => {
         excludeTagsList,
         includeTypeList,
         includeGrowthRateList,
+        includeYearList,
         groupedEntries,
         getMetrics,
         labels,

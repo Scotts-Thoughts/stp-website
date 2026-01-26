@@ -118,10 +118,13 @@ contextMenu.setOptions([
         action() {
             if (tierlist.activeCategory === "first") {
                 tierlist.activeCategory = "best";
-                toast.addToast("Switched to Followup Attemps", "info", { timeout: 2000 })
+                toast.addToast("Switched to Followup Attempts", "info", { timeout: 2000 })
+            } else if (tierlist.activeCategory === "best") {
+                tierlist.activeCategory = "recent";
+                toast.addToast("Switched to Most Recent Attempts", "info", { timeout: 2000 })
             } else {
                 tierlist.activeCategory = "first";
-                toast.addToast("Switched to First Attemps", "info", { timeout: 2000 })
+                toast.addToast("Switched to First Attempts", "info", { timeout: 2000 })
             }
         },
     },
