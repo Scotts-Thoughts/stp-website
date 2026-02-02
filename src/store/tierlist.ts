@@ -225,8 +225,15 @@ export const useTierlist = defineStore("tierlist", () => {
                 continue;
             }
             // get the most recent attempt by release date (sort descending and take first)
-            const sortedAttempts = [...attempts].sort((a, b) => b.releasedate - a.releasedate);
-            const attempt = sortedAttempts[0];
+            // When dates are equal, use array index as tiebreaker (higher index = more recent)
+            const indexedAttempts = attempts.map((attempt, index) => ({ attempt, index }));
+            indexedAttempts.sort((a, b) => {
+                if (b.attempt.releasedate !== a.attempt.releasedate) {
+                    return b.attempt.releasedate - a.attempt.releasedate;
+                }
+                return b.index - a.index;
+            });
+            const attempt = indexedAttempts[0].attempt;
             list.push({ pkmnName, attempt });
         }
         return list;
