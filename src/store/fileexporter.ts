@@ -68,34 +68,6 @@ export const useFileExporter = defineStore("file-exporter", () => {
         const seconds = String(now.getSeconds()).padStart(2, '0');
         return `${year}${month}${day}${hours}${minutes}${seconds}`;
     }
-    
-    function generateFilePrefix(): string {
-        const tierlist = useTierlist();
-        const name = tierlist.activeTierlist.name;
-        const game = tierlist.activeTierlist.game;
-        const category = tierlist.activeCategory === "first" ? "first" : "followup"; // "best" and "recent" are both followup
-        
-        // Extract generation from tierlist name (e.g., "Gen 1 - Yellow" -> "gen1")
-        // or from the game name pattern
-        let generation = "";
-        const genMatch = name.match(/gen\s*(\d+)/i);
-        if (genMatch) {
-            generation = `gen${genMatch[1]}`;
-        } else {
-            // Fallback: try to infer from game name
-            const gameToGen: Record<string, string> = {
-                "red": "gen1", "blue": "gen1", "yellow": "gen1", "green": "gen1",
-                "gold": "gen2", "silver": "gen2", "crystal": "gen2",
-                "ruby": "gen3", "sapphire": "gen3", "emerald": "gen3", "firered": "gen3", "leafgreen": "gen3",
-                "diamond": "gen4", "pearl": "gen4", "platinum": "gen4", "heartgold": "gen4", "soulsilver": "gen4",
-                "black": "gen5", "white": "gen5", "black2": "gen5", "white2": "gen5",
-            };
-            generation = gameToGen[game.toLowerCase()] || "gen0";
-        }
-        
-        // Format: gen1-yellow-first or gen1-yellow-followup
-        return `${generation}-${game.toLowerCase()}-${category}`;
-    }
 
     function unloadFolder() {
         filesystem.value = undefined;
