@@ -1,0 +1,255 @@
+{
+  "name": "Gen 5 - Black Tierlist",
+  "game": "Black",
+  "total": [82, 348, 649],
+  "thresholds_first": {
+    "realtime": [
+      {"label": "default", "data": ["1:15:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:15:00.00", "2:30:00.00", "2:45:00.00", "3:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["4:30:00", "5:00:00", "5:30:00", "6:00:00", "6:30:00", "7:00:00", "7:30:00", "8:00:00"]}]
+  },
+  "thresholds_best": {
+    "realtime": [
+      {"label": "default", "data": ["1:15:00.00", "1:20:00.00", "1:25:00.00", "1:30:00.00", "1:35:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00"]}
+    ],
+    "gametime": [{"label": "default", "data": ["6:30:00", "7:00:00", "7:30:00", "8:00:00", "8:30:00", "9:00:00", "9:30:00", "10:00:00"]}]
+  },
+  "platform": "Nintendo DS",
+  "cartridgeImage": "/images/cartridges/5-black.png",
+  "visible": true,
+  "finalTierLabel": "Impossible",
+  "surgeTierLabel": "Skyla",
+  "surgeTierImage": "./images/skyla.png",
+  "brunoTierLabel": "Brycen",
+  "brunoTierImage": "./images/brycen.png",
+  "entries": {
+    "Serperior": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-25", "realtime": "1:47:10.00", "gametime": "5:44:00", "level": 69, "resets": 4, "blackouts": 2},
+        {"finished": true, "releasedate": "2026-03-25", "realtime": "1:25:29.93", "gametime": "5:33:00", "level": 69, "resets": 5, "blackouts": 3}
+      ]
+    },
+    "Emboar": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-26", "realtime": "1:40:28.00", "gametime": "5:15:00", "level": 71, "resets": 5, "blackouts": 3},
+        {"finished": true, "releasedate": "2026-03-26", "realtime": "1:22:49.87", "gametime": "5:26:00", "level": 70, "resets": 3, "blackouts": 6}
+      ]
+    },
+    "Samurott": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-27", "realtime": "1:48:12.00", "gametime": "5:33:00", "level": 73, "resets": 9, "blackouts": 3},
+        {"finished": true, "releasedate": "2026-03-27", "realtime": "1:29:21.00", "gametime": "5:45:00", "level": 69, "resets": 6, "blackouts": 4}
+      ]
+    },
+    "Stoutland": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-28", "realtime": "1:32:20.00", "gametime": "4:59:00", "level": 68, "resets": 2, "blackouts": 8},
+        {"finished": true, "releasedate": "2026-05-08", "realtime": "1:10:51.12", "gametime": "4:34:00", "level": 69, "resets": 4}
+      ]
+    },
+    "Zoroark": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-30", "realtime": "1:56:58.00", "gametime": "6:07:00", "level": 68, "resets": 7, "blackouts": 23},
+        {"finished": true, "releasedate": "2026-06-20", "realtime": "1:25:36.45", "gametime": "5:38:00", "level": 69, "resets": 2, "blackouts": 7}
+      ]
+    },
+    "Beheeyem": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-29", "realtime": "3:19:12.00", "gametime": "9:45:00", "level": 78, "resets": 40, "blackouts": 24}
+      ]
+    },
+    "Genesect": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2025-12-31", "realtime": "1:42:47.00", "gametime": "5:13:00", "level": 65, "resets": 11, "blackouts": 4},
+        {"finished": true, "releasedate": "2026-06-20", "realtime": "1:23:56.88", "gametime": "5:26:00", "level": 65, "resets": 5, "blackouts": 8}
+      ]
+    },
+    "Druddigon": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-02-14", "realtime": "1:24:00.00", "gametime": "5:27:00", "level": 71, "resets": 3, "blackouts": 4}
+      ]
+    },
+    "Zebstrika": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-03-28", "realtime": "1:55:34.00", "gametime": "7:17:00", "level": 79, "resets": 6, "blackouts": 19}
+      ]
+    },
+    "Unfezant": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-05-09", "realtime": "1:15:50.00", "gametime": "5:00:00", "level": 70, "resets": 1, "blackouts": 5}
+      ]
+    },
+    "Garbodor": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-05-30", "realtime": "1:55:48.00", "gametime": "7:04:00", "level": 72, "resets": 16, "blackouts": 8}
+      ]
+    },
+    "Gigalith": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-06-20", "realtime": "1:51:06.28", "gametime": "5:56:00", "level": 69, "resets": 25, "blackouts": 11}
+      ]
+    },
+    "Maractus": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-07-10", "realtime": "1:24:33.64", "gametime": "5:07:00", "level": 69, "resets": 15, "blackouts": 2}
+      ]
+    },
+    "Basculin": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-07-11", "realtime": "1:33:35.89", "gametime": "5:26:00", "level": 72, "resets": 29, "blackouts": 17}
+      ]
+    },
+    "Heatmor": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-07-31", "realtime": "1:33:48.23", "gametime": "6:12:00", "level": 71, "resets": 1, "blackouts": 10}
+      ]
+    },
+    "Durant": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-08-01", "realtime": "1:16:24.82", "gametime": "4:51:00", "level": 70, "resets": 8, "blackouts": 8}
+      ]
+    },
+    "Stunfisk": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-08-22", "realtime": "1:46:09.32", "gametime": "6:00:00", "level": 71, "resets": 20, "blackouts": 6}
+      ]
+    },
+    "Krookodile": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-10-07", "realtime": "1:14:46.42", "gametime": "4:55:00", "level": 68, "resets": 2, "blackouts": 4}
+      ]
+    },
+    "Jellicent": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-10-14", "realtime": "1:39:56.24", "gametime": "6:30:00", "level": 74, "resets": 10, "blackouts": 21}
+      ]
+    },
+    "Crustle": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-11-04", "realtime": "1:21:57.49", "gametime": "5:09:00", "level": 71, "resets": 9, "blackouts": 7}
+      ]
+    },
+    "Cryogonal": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-11-04", "realtime": "1:38:32.08", "gametime": "5:45:00", "level": 72, "resets": 27, "blackouts": 12}
+      ]
+    },
+    "Swoobat": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-11-04", "realtime": "1:39:17.41", "gametime": "5:55:00", "level": 71, "resets": 17, "blackouts": 14}
+      ]
+    },
+    "Excadrill": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-11-25", "realtime": "1:14:09.56", "gametime": "4:52:00", "level": 68, "resets": 2, "blackouts": 11}
+      ]
+    },
+    "Mienshao": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-12-02", "realtime": "1:18:58.49", "gametime": "5:04:00", "level": 67, "resets": 7, "blackouts": 11}
+      ]
+    },
+    "Cinccino": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-09-12", "realtime": "1:09:06.96", "gametime": "4:34:00", "level": 73, "resets": 2, "blackouts": 8}
+      ]
+    },
+    "Meloetta": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-12-16", "realtime": "1:03:47.74", "gametime": "4:12:00", "level": 65, "resets": 2, "blackouts": 2}
+      ]
+    },
+    "Volcarona": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-10-21", "realtime": "1:52:28.48", "gametime": "7:00:00", "level": 69, "resets": 14, "blackouts": 27}
+      ]
+    },
+    "Gothitelle": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-12-09", "realtime": "1:30:17.81", "gametime": "5:51:00", "level": 69, "resets": 5, "blackouts": 15}
+      ]
+    },
+    "Landorus": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [{"finished": true, "releasedate": "2026-12-23", "realtime": "1:05:02.43", "gametime": "4:19:00", "level": 64, "blackouts": 2}]
+    },
+    "Thundurus": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-12-23", "realtime": "1:28:00.26", "gametime": "5:27:00", "level": 69, "resets": 15, "blackouts": 20}
+      ]
+    },
+    "Tornadus": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-12-23", "realtime": "1:26:12.19", "gametime": "5:33:00", "level": 69, "resets": 6, "blackouts": 15}
+      ]
+    },
+    "Cofagrigus": {
+      "numAttempts": 0,
+      "numFinishes": 0,
+      "attempts": [
+        {"finished": true, "releasedate": "2026-10-28", "realtime": "4:16:37.77", "gametime": "14:44:00", "level": 77, "resets": 106, "blackouts": 41}
+      ]
+    }
+  }
+}
