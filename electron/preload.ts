@@ -13,7 +13,10 @@ contextBridge.exposeInMainWorld('electronFS', {
   
   listFiles: (): Promise<Array<{ name: string; kind: 'file' | 'directory' }>> => 
     ipcRenderer.invoke('fs:listFiles'),
-  
+
+  listTrash: (): Promise<string[]> =>
+    ipcRenderer.invoke('fs:listTrash'),
+
   deleteFile: (filename: string): Promise<boolean> => 
     ipcRenderer.invoke('fs:deleteFile', filename),
   

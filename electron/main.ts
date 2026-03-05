@@ -97,6 +97,12 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:writeFile', async (_event: Electron.IpcMainInvokeEvent, filename: string, content: string) => {
+    if (filename.startsWith('trash/')) {
+      const trashPath = path.join(workspacePath, 'trash')
+      if (!fs.existsSync(trashPath)) {
+        fs.mkdirSync(trashPath, { recursive: true })
+      }
+    }
     const filePath = path.join(workspacePath, filename)
     try {
       fs.writeFileSync(filePath, content, 'utf-8')
@@ -118,6 +124,19 @@ function setupIpcHandlers(): void {
         name: entry.name,
         kind: entry.isDirectory() ? 'directory' : 'file'
       }))
+    } catch (error) {
+      return []
+    }
+  })
+
+  ipcMain.handle('fs:listTrash', async () => {
+    const trashPath = path.join(workspacePath, 'trash')
+    try {
+      if (!fs.existsSync(trashPath)) return []
+      const entries = fs.readdirSync(trashPath, { withFileTypes: true })
+      return entries
+        .filter((e: Dirent) => e.isFile() && e.name.endsWith('.json'))
+        .map((e: Dirent) => e.name)
     } catch (error) {
       return []
     }

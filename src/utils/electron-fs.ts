@@ -6,6 +6,7 @@ declare global {
       writeFile: (filename: string, content: string) => Promise<boolean>
       fileExists: (filename: string) => Promise<boolean>
       listFiles: () => Promise<Array<{ name: string; kind: 'file' | 'directory' }>>
+      listTrash: () => Promise<string[]>
       deleteFile: (filename: string) => Promise<boolean>
       getWorkspacePath: () => Promise<string>
     }
@@ -55,6 +56,13 @@ class ElectronFS {
       throw new Error('Electron FS not available')
     }
     return window.electronFS.listFiles()
+  }
+
+  async listTrash(): Promise<string[]> {
+    if (!window.electronFS) {
+      throw new Error('Electron FS not available')
+    }
+    return window.electronFS.listTrash()
   }
 
   async isDirEmpty(_path: string): Promise<boolean> {

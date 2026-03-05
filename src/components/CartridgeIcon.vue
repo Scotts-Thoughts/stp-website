@@ -246,4 +246,70 @@ const displayImage = computed(() => {
 .cartridge.pearl .cartridge-body {
   background: linear-gradient(135deg, #c7a7aa 0%, #c5989c 50%, #85555a 100%);
 }
+
+/* Gen 6+ cartridge gradients (from cover art) */
+.cartridge.x .cartridge-body {
+  background: linear-gradient(135deg, #4b3d8a 0%, #3d5a9e 50%, #2d7ab8 100%);
+}
+
+.cartridge.y .cartridge-body {
+  background: linear-gradient(135deg, #c41e3a 0%, #8b2a3a 50%, #2c2c2c 100%);
+}
+
+.cartridge.omegaruby .cartridge-body {
+  background: linear-gradient(135deg, #d50000 0%, #ff5722 50%, #ffe045 100%);
+}
+
+.cartridge.alphasapphire .cartridge-body {
+  background: linear-gradient(135deg, #00bcd4 0%, #0097a7 50%, #1a237e 100%);
+}
+
+.cartridge.sun .cartridge-body {
+  background: linear-gradient(135deg, #fffaae 0%, #ffd700 50%, #ff8c00 100%);
+}
+
+.cartridge.moon .cartridge-body {
+  background: linear-gradient(135deg, #00bfff 0%, #4b0082 50%, #2e0854 100%);
+}
+
+.cartridge.ultrasun .cartridge-body {
+  background: linear-gradient(135deg, #e44d26 0%, #ff671c 50%, #ffb800 100%);
+}
+
+.cartridge.ultramoon .cartridge-body {
+  background: linear-gradient(135deg, #1a0a4a 0%, #6e39a3 50%, #66ccff 100%);
+}
+
+.cartridge.sword .cartridge-body {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2a5a8e 50%, #d4af37 100%);
+}
+
+.cartridge.shield .cartridge-body {
+  background: linear-gradient(135deg, #e82a7f 0%, #bc2066 50%, #7f2b36 100%);
+}
+
+.cartridge.brilliantdiamond .cartridge-body {
+  background: linear-gradient(135deg, #a9f6ff 0%, #4da6ff 50%, #2a5a8e 100%);
+}
+
+.cartridge.shiningpearl .cartridge-body {
+  background: linear-gradient(135deg, #c62b8d 0%, #9b2d6b 50%, #4a1942 100%);
+}
+
+.cartridge.scarlett .cartridge-body {
+  background: linear-gradient(135deg, #dc3545 0%, #b02a37 50%, #842029 100%);
+}
+
+.cartridge.violet .cartridge-body {
+  background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 50%, #3d2465 100%);
+}
+
+.cartridge.winds .cartridge-body {
+  background: linear-gradient(135deg, #87ceeb 0%, #b0e0e6 50%, #7eb8da 100%);
+}
+
+.cartridge.waves .cartridge-body {
+  background: linear-gradient(135deg, #20b2aa 0%, #008b8b 50%, #006666 100%);
+}
+
 </style>

@@ -6,9 +6,17 @@ import { Tierlist, METRIC_STATIC_KEYS, METRIC_TIME_KEYS, METRIC, Metrics, Tierli
 import FS from '../utils/fs'
 import ElectronFS, { isElectron } from '../utils/electron-fs'
 import Result from '../utils/result';
+import { getGameConfig, getGameOrder } from '../constants/games';
 import { formatDate, parseDate, parseTime } from '../utils/time';
 import { defineStore } from 'pinia';
 
+/** Sort tierlists by TIERLIST_GAMES order (same as create dropdown), then by name within same game. */
+function sortTierlistsByGameOrder(a: Tierlist, b: Tierlist): number {
+    const orderA = getGameOrder(a.game);
+    const orderB = getGameOrder(b.game);
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+}
 
 export type Workspace = {
     pkmnSettings: PokemonSettings
@@ -78,13 +86,155 @@ export const useWorkspace = defineStore("workspace", () => {
         return tierlist;
     });
 
-    async function createTierlist(name: string) {
+    function setTierlistVisible(index: number, visible: boolean) {
+        if (index >= 0 && index < tierlists.value.length) {
+            tierlists.value[index].visible = visible;
+        }
+    }
+
+    const TRASH_DIR = 'trash';
+
+    /** Move tierlist to trash (recoverable). */
+    async function moveTierlistToTrash(index: number) {
+        if (index < 0 || index >= tierlists.value.length) {
+            return Result.failure("Invalid tierlist index.");
+        }
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) {
+            return Result.failure("Filesystem not ready.");
+        }
+        const tierlist = tierlists.value[index];
+        const filename = tierlist.filename;
+        try {
+            if (!runningInElectron && filesystem.value && !(await filesystem.value.dirExists(TRASH_DIR))) {
+                await filesystem.value.createDir(TRASH_DIR);
+            }
+            const content = stringify(tierlist);
+            await fs.write(`${TRASH_DIR}/${filename}`, content);
+            if (await fs.fileExists(filename)) {
+                await fs.deleteFile(filename);
+            }
+        } catch (e) {
+            return Result.failure(`Failed to move to trash: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        tierlistBackups.value.delete(filename);
+        tierlists.value.splice(index, 1);
+        if (activeTierlistIndex.value === index) {
+            activeTierlistIndex.value = -1;
+        } else if (activeTierlistIndex.value > index) {
+            activeTierlistIndex.value--;
+        }
+        return Result.success(undefined);
+    }
+
+    /** Permanently delete a tierlist (no trash). */
+    async function deleteTierlist(index: number) {
+        if (index < 0 || index >= tierlists.value.length) {
+            return Result.failure("Invalid tierlist index.");
+        }
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) {
+            return Result.failure("Filesystem not ready.");
+        }
+        const tierlist = tierlists.value[index];
+        const filename = tierlist.filename;
+        try {
+            if (await fs.fileExists(filename)) {
+                await fs.deleteFile(filename);
+            }
+        } catch (e) {
+            return Result.failure(`Failed to delete file: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        tierlistBackups.value.delete(filename);
+        tierlists.value.splice(index, 1);
+        if (activeTierlistIndex.value === index) {
+            activeTierlistIndex.value = -1;
+        } else if (activeTierlistIndex.value > index) {
+            activeTierlistIndex.value--;
+        }
+        return Result.success(undefined);
+    }
+
+    /** List tierlists in trash (filename + display name). */
+    async function getTrashContents(): Promise<{ filename: string; name: string }[]> {
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) return [];
+        let filenames: string[];
+        if (runningInElectron) {
+            filenames = await (fs as ElectronFS).listTrash();
+        } else {
+            const brFs = fs as FS;
+            if (!(await brFs.dirExists(TRASH_DIR))) return [];
+            const entries = await fs.getDirEntries(TRASH_DIR);
+            filenames = entries.filter(e => e.kind === 'file' && e.name.endsWith('.json')).map(e => e.name);
+        }
+        const result: { filename: string; name: string }[] = [];
+        for (const fn of filenames) {
+            try {
+                const data = await fs.read(`${TRASH_DIR}/${fn}`);
+                const parsed = parseTierlist(data);
+                result.push({ filename: fn, name: parsed?.name ?? fn });
+            } catch (_) {
+                result.push({ filename: fn, name: fn });
+            }
+        }
+        return result;
+    }
+
+    /** Restore a tierlist from trash. */
+    async function restoreFromTrash(filename: string) {
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) return Result.failure("Filesystem not ready.");
+        const trashPath = `${TRASH_DIR}/${filename}`;
+        try {
+            const data = await fs.read(trashPath);
+            const tierlist = parseTierlist(data);
+            if (!tierlist) return Result.failure("Invalid tierlist in trash.");
+            tierlist.filename = filename;
+            if (await fs.fileExists(filename)) {
+                return Result.failure("A tierlist with that name already exists.");
+            }
+            await fs.write(filename, stringify(tierlist));
+            await fs.deleteFile(trashPath);
+            tierlists.value.push(tierlist);
+            tierlists.value.sort(sortTierlistsByGameOrder);
+            backupTierlistEntries(filename, tierlist);
+            return Result.success(undefined);
+        } catch (e) {
+            return Result.failure(`Failed to restore: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    /** Permanently remove all tierlists in trash. */
+    async function emptyTrash() {
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) return Result.failure("Filesystem not ready.");
+        let filenames: string[];
+        if (runningInElectron) {
+            filenames = await (fs as ElectronFS).listTrash();
+        } else {
+            const brFs = fs as FS;
+            if (!(await brFs.dirExists(TRASH_DIR))) return Result.success(undefined);
+            const entries = await fs.getDirEntries(TRASH_DIR);
+            filenames = entries.filter(e => e.kind === 'file' && e.name.endsWith('.json')).map(e => e.name);
+        }
+        try {
+            for (const fn of filenames) {
+                await fs.deleteFile(`${TRASH_DIR}/${fn}`);
+            }
+            return Result.success(undefined);
+        } catch (e) {
+            return Result.failure(`Failed to empty trash: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    async function createTierlist(name: string, game?: string) {
         const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
         if (!fs) {
             return Result.failure("Filesystem not ready.");
         }
 
-        const tierlist = generateTierlist(name);
+        const tierlist = generateTierlist(name, game);
         const path = tierlist.filename;
 
         if (await fs.fileExists(path)) {
@@ -93,9 +243,11 @@ export const useWorkspace = defineStore("workspace", () => {
 
         await fs.write(path, stringify(tierlist));
         tierlists.value.push(tierlist);
+        tierlists.value.sort(sortTierlistsByGameOrder);
 
         // return the index of the new tierlist
-        return Result.success(tierlists.value.length - 1);
+        const newIndex = tierlists.value.findIndex(t => t.filename === tierlist.filename);
+        return Result.success(newIndex >= 0 ? newIndex : tierlists.value.length - 1);
     }
 
     function insertActiveTierlistEntry(pokemon: string, attempt: Partial<Metrics>) {
@@ -195,8 +347,8 @@ export const useWorkspace = defineStore("workspace", () => {
             backupTierlistEntries(tierlist.filename, tierlist);
         }
 
-        // sort tierlists by name
-        tierlists.value.sort((a, b) => a.name.localeCompare(b.name));
+        // sort tierlists by game order (same as "Create new tierlist" dropdown), then by name within same game
+        tierlists.value.sort(sortTierlistsByGameOrder);
 
         return Result.success(undefined);
     }
@@ -308,6 +460,12 @@ export const useWorkspace = defineStore("workspace", () => {
         activeTierlist,
         setActiveTierlist,
         insertActiveTierlistEntry,
+        setTierlistVisible,
+        moveTierlistToTrash,
+        deleteTierlist,
+        getTrashContents,
+        restoreFromTrash,
+        emptyTrash,
         removeCachedHandle,
         checkHandleCached,
         loadWorkspace,
@@ -549,15 +707,20 @@ function stringifyTierlist(tierlist: Tierlist): string {
     return stringify(tierlistRaw, { maxLength: 150 });
 }
 
-function generateTierlist(name: string) {
+function generateTierlist(name: string, game?: string): Tierlist {
+    const gameName = game ?? "Yellow";
+    const config = getGameConfig(gameName);
     const filename = `${name.toLowerCase().replace(/[^a-z0-9]/gi, "_")}.json`;
-    return{
+    return {
         filename,
         name,
-        game: "Yellow",
+        game: gameName,
         total: [0],
         thresholds_first: {},
         thresholds_best: {},
-        entries: {}
+        entries: {},
+        platform: config?.platform,
+        cartridgeImage: config?.cartridgeImage,
+        visible: true,
     } as Tierlist;
 }

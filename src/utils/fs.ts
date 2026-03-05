@@ -206,6 +206,14 @@ class FS {
         return file.text();
     }
 
+    /**
+     * Deletes a file at the given path (relative to root). For root-level files, path is the filename.
+     */
+    async deleteFile(path: string): Promise<void> {
+        await this.rootHandle.removeEntry(path, { recursive: false });
+        this.fileCache.delete(path);
+    }
+
     async lastModified(path: string) {
         const file = await this.getFile(path);
         return file.lastModified

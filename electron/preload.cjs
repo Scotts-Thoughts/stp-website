@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronFS', {
   writeFile: (filename, content) => ipcRenderer.invoke('fs:writeFile', filename, content),
   fileExists: (filename) => ipcRenderer.invoke('fs:fileExists', filename),
   listFiles: () => ipcRenderer.invoke('fs:listFiles'),
+  listTrash: () => ipcRenderer.invoke('fs:listTrash'),
   deleteFile: (filename) => ipcRenderer.invoke('fs:deleteFile', filename),
   getWorkspacePath: () => ipcRenderer.invoke('fs:getWorkspacePath'),
 })

@@ -20,24 +20,37 @@ const enum Mode {
 const workspace = useWorkspace();
 const fileexporter = useFileExporter();
 
-// Start in loading mode if Electron, otherwise in choose workspace mode
-const mode = ref<Mode>(workspace.runningInElectron ? Mode.LOADING : Mode.CHOOSE_WORKSPACE);
+// Start in loading mode so we can auto-load workspace (Electron or browser cache)
+const mode = ref<Mode>(Mode.LOADING);
 
-// Auto-load workspace when running in Electron
+// Auto-load workspace on launch: Electron uses userData path; browser uses cached handle if available
 onMounted(async () => {
-    if (workspace.runningInElectron) {
-        try {
+    try {
+        if (workspace.runningInElectron) {
             const result = await workspace.loadWorkspace();
             if (result.success) {
                 mode.value = Mode.CHOOSE_TIERLIST;
                 workspace.setActiveTierlist(-1);
             } else {
                 console.error('Failed to load workspace:', result.message);
-                // Show error state - for now just log
+                mode.value = Mode.CHOOSE_WORKSPACE;
             }
-        } catch (e) {
-            console.error('Failed to load workspace:', e);
+        } else {
+            // Browser: try loading from cached folder handle so user doesn't have to click "Load from Cache"
+            const cached = await workspace.checkHandleCached();
+            if (cached) {
+                const result = await workspace.loadWorkspace();
+                if (result.success) {
+                    mode.value = Mode.CHOOSE_TIERLIST;
+                    workspace.setActiveTierlist(-1);
+                    return;
+                }
+            }
+            mode.value = Mode.CHOOSE_WORKSPACE;
         }
+    } catch (e) {
+        console.error('Failed to load workspace:', e);
+        mode.value = Mode.CHOOSE_WORKSPACE;
     }
 });
 
@@ -71,7 +84,7 @@ function handler(e: MouseEvent) {
     <Suspense>
         <template #default>
             <div class="app" @contextmenu="handler">
-                <!-- Loading state for Electron -->
+                <!-- Loading state while workspace is auto-loading -->
                 <div v-if="mode == Mode.LOADING" class="loading-screen">
                     <div class="loading-content">
                         <div class="loading-spinner"></div>
