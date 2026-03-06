@@ -195,7 +195,10 @@ class FS {
     async write(path: string, data: FileSystemWriteChunkType) {
         const writable = await this.getWritable(path);
         await writable.write(data);
-        return writable.close();
+        await writable.close();
+        // Invalidate cached handle after write — the handle's internal state becomes
+        // stale after createWritable/close, causing InvalidStateError on subsequent getFile() calls.
+        this.fileCache.delete(path);
     }
 
     /**
@@ -207,10 +210,18 @@ class FS {
     }
 
     /**
-     * Deletes a file at the given path (relative to root). For root-level files, path is the filename.
+     * Deletes a file at the given path (relative to root). Supports subdirectory paths like "trash/file.json".
      */
     async deleteFile(path: string): Promise<void> {
-        await this.rootHandle.removeEntry(path, { recursive: false });
+        const lastSlash = path.lastIndexOf('/');
+        if (lastSlash === -1) {
+            await this.rootHandle.removeEntry(path, { recursive: false });
+        } else {
+            const dir = path.substring(0, lastSlash);
+            const name = path.substring(lastSlash + 1);
+            const dirHandle = await this.getDirHandle(dir, false);
+            await dirHandle.removeEntry(name, { recursive: false });
+        }
         this.fileCache.delete(path);
     }
 

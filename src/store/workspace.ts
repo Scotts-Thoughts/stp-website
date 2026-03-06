@@ -495,13 +495,18 @@ function parseTierlist(data: string): Tierlist | undefined {
 
     tierlist.filename = "";
     tierlist.name = tierlistRaw.name;
-    tierlist.game = tierlistRaw.game || "Yellow";
+    let gameName = tierlistRaw.game || "Yellow";
+    if (gameName === "Black2") gameName = "Black 2";
+    if (gameName === "White2") gameName = "White 2";
+    tierlist.game = gameName;
     tierlist.total = tierlistRaw.total;
     tierlist.thresholds_first = {};
     tierlist.thresholds_best = {};
     tierlist.imageSource = tierlistRaw.imageSource;
-    tierlist.platform = tierlistRaw.platform;
-    tierlist.cartridgeImage = tierlistRaw.cartridgeImage;
+    // Ensure platform and cartridgeImage from config so tierlists appear in correct row (e.g. Red, Yellow, Crystal)
+    const gameConfig = getGameConfig(tierlist.game);
+    tierlist.platform = gameConfig?.platform ?? tierlistRaw.platform;
+    tierlist.cartridgeImage = gameConfig?.cartridgeImage ?? tierlistRaw.cartridgeImage;
     tierlist.visible = tierlistRaw.visible !== undefined ? tierlistRaw.visible : true;
     tierlist.finalTierLabel = tierlistRaw.finalTierLabel;
     tierlist.surgeTierLabel = tierlistRaw.surgeTierLabel;

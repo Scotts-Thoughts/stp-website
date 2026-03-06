@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useWorkspace, useContextMenu } from '../store';
 import type { Tierlist } from '../store/tierlist';
 import CartridgeIcon from '../components/CartridgeIcon.vue';
-import { TIERLIST_GAMES, getGameOrder } from '../constants/games';
+import { TIERLIST_GAMES, getGameOrder, getGameConfig } from '../constants/games';
 
 const emit = defineEmits<{
     select: [index: number],
@@ -72,27 +72,7 @@ function sortByGameOrderThenName<T extends { game: string; name: string }>(a: T,
     return a.name.localeCompare(b.name);
 }
 
-// Define specific order for platforms that use name-based ordering
-const gameBoyAdvanceOrder = [
-    'Gen 3 - Ruby Tierlist',
-    'Gen 3 - Sapphire Tierlist',
-    'Gen 3 - Emerald Tierlist',
-    'Gen 3 - FireRed Tierlist',
-    'Gen 3 - FireRed Postgame Tierlist',
-    'Gen 3 - LeafGreen Tierlist',
-];
-
-const nintendoDSOrder = [
-    'Gen 4 - Platinum Tierlist',
-    'Gen 4 - Diamond Tierlist',
-    'Gen 4 - Pearl Tierlist',
-    'Gen 4 - HeartGold Tierlist',
-    'Gen 4 - SoulSilver Tierlist',
-    'Gen 5 - Black Tierlist',
-    'Gen 5 - White2 Tierlist'
-];
-
-// Group tierlists by platform with specific ordering (GB/GBC use game order: Green, Red, Blue, Yellow, Gold, Silver, Crystal)
+// Group tierlists by platform (order from TIERLIST_GAMES: Green→Crystal, Ruby→LeafGreen, Diamond→White2, X→Ultra Moon, Sword→Violet, Winds/Waves) with specific ordering (GB/GBC use game order: Green, Red, Blue, Yellow, Gold, Silver, Crystal)
 const gameBoyTierlists = computed(() => {
     return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Game Boy')
@@ -119,73 +99,59 @@ const shouldCombineGameBoyRows = computed(() => {
 const gameBoyAdvanceTierlists = computed(() => {
     return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Game Boy Advance')
-        .sort((a, b) => {
-            const aIndex = gameBoyAdvanceOrder.indexOf(a.name);
-            const bIndex = gameBoyAdvanceOrder.indexOf(b.name);
-            
-            if (aIndex !== -1 && bIndex !== -1) {
-                return aIndex - bIndex;
-            }
-            if (aIndex !== -1) return -1;
-            if (bIndex !== -1) return 1;
-            return a.name.localeCompare(b.name);
-        });
+        .sort(sortByGameOrderThenName);
 });
 
 const nintendoDSTierlists = computed(() => {
     return mainTierlists.value
         .filter(tierlist => tierlist.platform === 'Nintendo DS')
-        .sort((a, b) => {
-            const aIndex = nintendoDSOrder.indexOf(a.name);
-            const bIndex = nintendoDSOrder.indexOf(b.name);
-            
-            if (aIndex !== -1 && bIndex !== -1) {
-                return aIndex - bIndex;
-            }
-            if (aIndex !== -1) return -1;
-            if (bIndex !== -1) return 1;
-            return a.name.localeCompare(b.name);
-        });
+        .sort(sortByGameOrderThenName);
 });
 
 // Platform groups for rows (3DS, Switch, Switch2, and true "other" get separate rows)
 const mainPlatforms = ['Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Nintendo DS'];
 const nintendo3DSTierlists = computed(() =>
-    mainTierlists.value.filter(t => t.platform === 'Nintendo 3DS').sort((a, b) => a.name.localeCompare(b.name))
+    mainTierlists.value.filter(t => t.platform === 'Nintendo 3DS').sort(sortByGameOrderThenName)
 );
 const nintendoSwitchTierlists = computed(() =>
-    mainTierlists.value.filter(t => t.platform === 'Nintendo Switch').sort((a, b) => a.name.localeCompare(b.name))
+    mainTierlists.value.filter(t => t.platform === 'Nintendo Switch').sort(sortByGameOrderThenName)
 );
 const nintendoSwitch2Tierlists = computed(() =>
-    mainTierlists.value.filter(t => t.platform === 'Switch2').sort((a, b) => a.name.localeCompare(b.name))
+    mainTierlists.value.filter(t => t.platform === 'Switch2').sort(sortByGameOrderThenName)
 );
 const otherTierlists = computed(() => {
     return mainTierlists.value
         .filter(t => ![...mainPlatforms, 'Nintendo 3DS', 'Nintendo Switch', 'Switch2'].includes(t.platform ?? ''))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort(sortByGameOrderThenName);
 });
 
-// When groupByGame is true: one entry per game, with all tierlists for that game
+// When groupByGame is true: one entry per game, with all tierlists for that game.
+// "Red and Blue" is never grouped (each tierlist stays its own card).
+function groupKeyForTierlist(tierlist: Tierlist): string {
+    const g = tierlist.game;
+    if (g === 'Red and Blue' || /red\s+and\s+blue/i.test(g)) return `${g}::${tierlist.filename}`;
+    return g;
+}
 type GameGroup = { game: string; tierlists: { tierlist: Tierlist; index: number }[]; firstTierlist: Tierlist };
 const groupedByGame = computed((): GameGroup[] => {
     const list = mainTierlists.value;
     const withIndex = list.map(tierlist => ({ tierlist, index: workspace.tierlists.indexOf(tierlist) }));
     const byGame = new Map<string, { tierlist: Tierlist; index: number }[]>();
     for (const item of withIndex) {
-        const g = item.tierlist.game;
+        const g = groupKeyForTierlist(item.tierlist);
         if (!byGame.has(g)) byGame.set(g, []);
         byGame.get(g)!.push(item);
     }
     const groups: GameGroup[] = [];
-    for (const [game, items] of byGame.entries()) {
+    for (const [, items] of byGame.entries()) {
         groups.push({
-            game,
+            game: items[0].tierlist.game,
             tierlists: items,
             firstTierlist: items[0].tierlist,
         });
     }
-    // Order by first occurrence in main list (preserve visual order)
-    groups.sort((a, b) => Math.min(...a.tierlists.map(t => t.index)) - Math.min(...b.tierlists.map(t => t.index)));
+    // Order groups by canonical game order (TIERLIST_GAMES) so "Hide hidden" + "Group by game" show correct order
+    groups.sort((a, b) => getGameOrder(a.game) - getGameOrder(b.game));
     return groups;
 });
 
@@ -219,6 +185,11 @@ function openGamePopover(game: string) {
     popoverGame.value = popoverGame.value === game ? null : game;
 }
 
+/** Use game config cover art when tierlist has no cartridgeImage (e.g. 3DS/Switch/Switch2). */
+function effectiveCartridgeImage(tierlist: Tierlist): string | undefined {
+    return getGameConfig(tierlist.game)?.cartridgeImage ?? tierlist.cartridgeImage;
+}
+
 function onGroupClick(group: GameGroup) {
     if (group.tierlists.length === 1) {
         emit('select', group.tierlists[0].index);
@@ -250,6 +221,15 @@ function onRowWheel(e: WheelEvent) {
 function getCartridgeColor(name: string): string {
     const lowerName = name.toLowerCase();
 
+    // Standalone "Blue" (e.g. "Gen 1 - Blue Tierlist") must get blue, not red from "Red and Blue"
+    if (/\bblue\b/.test(lowerName) && !/red\s+and\s+blue/.test(lowerName)) return 'blue';
+
+    // Exact / combined game name matches (check first)
+    if (lowerName === 'red and blue' || lowerName.includes('red and blue')) return 'red';
+    if (lowerName === 'green (jpn)' || lowerName.includes('green (jpn)') || lowerName.includes('japanese green')) return 'green';
+    if (lowerName === "let's go pikachu" || lowerName.includes("let's go pikachu")) return 'yellow';
+    if (lowerName === "let's go eevee" || lowerName.includes("let's go eevee")) return 'red';
+
     // Gen 6+ multi-word games (check before single-word matches)
     if (lowerName.includes('omega ruby')) return 'omegaruby';
     if (lowerName.includes('alpha sapphire')) return 'alphasapphire';
@@ -280,10 +260,6 @@ function getCartridgeColor(name: string): string {
     if (lowerName.includes('moon')) return 'moon';
 
     // General color names
-    if (lowerName.includes('blue')) return 'blue';
-    if (lowerName.includes('red')) return 'red';
-    if (lowerName.includes('green')) return 'green';
-    if (lowerName.includes('yellow')) return 'yellow';
     if (lowerName.includes('crystal')) return 'crystal';
     if (lowerName.includes('emerald')) return 'emerald';
     if (lowerName.includes('platinum')) return 'platinum';
@@ -295,6 +271,10 @@ function getCartridgeColor(name: string): string {
     if (lowerName.includes('sapphire')) return 'sapphire';
     if (lowerName.includes('diamond')) return 'diamond';
     if (lowerName.includes('pearl')) return 'pearl';
+    if (lowerName.includes('blue')) return 'blue';
+    if (lowerName.includes('red')) return 'red';
+    if (lowerName.includes('green')) return 'green';
+    if (lowerName.includes('yellow')) return 'yellow';
 
     return 'yellow'; // default
 }
@@ -342,6 +322,16 @@ watch(groupByGame, (on) => {
     if (!on) popoverGame.value = null;
 });
 
+// Esc closes the Trash popup
+watch(showTrashPanel, (isOpen) => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') showTrashPanel.value = false;
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+});
+
 watch(newTierlistGame, (game) => {
     newTierlistName.value = `${game} Tierlist`;
 });
@@ -366,10 +356,9 @@ async function createNewTierlist() {
 }
 
 // ---- Right-click hide/unhide/delete ----
-function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; name?: string }, index: number) {
-    e.preventDefault();
+function buildContextMenuOptions(tierlist: { visible?: boolean; name?: string }, index: number) {
     const isHidden = tierlist.visible === false;
-    contextMenu.setOptions([
+    return [
         {
             label: isHidden ? 'Unhide tierlist' : 'Hide tierlist',
             action: () => {
@@ -387,7 +376,30 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                 else await workspace.saveWorkspace();
             },
         },
-    ]);
+    ];
+}
+
+function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; name?: string }, index: number) {
+    e.preventDefault();
+    contextMenu.setOptions(buildContextMenuOptions(tierlist, index));
+    contextMenu.show(e.clientX, e.clientY);
+}
+
+function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
+    e.preventDefault();
+    if (group.tierlists.length === 1) {
+        const item = group.tierlists[0];
+        contextMenu.setOptions(buildContextMenuOptions(item.tierlist, item.index));
+    } else {
+        const options = group.tierlists.map(item => ({
+            label: item.tierlist.name ?? item.tierlist.filename,
+            action: () => {
+                onCartridgeContextMenu(e, item.tierlist, item.index);
+                return false as const;
+            },
+        }));
+        contextMenu.setOptions(options);
+    }
     contextMenu.show(e.clientX, e.clientY);
 }
 
@@ -396,15 +408,22 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
 
 <template>
     <div class="choose-tierlist">
-        <button class="trash-btn top-left" title="Trash" @click="openTrashPanel">Trash</button>
+        <button type="button" class="trash-btn top-left" title="Trash" @click="openTrashPanel" aria-label="Trash">
+            <svg class="trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+        </button>
         <button class="create-btn top-right" title="Create new tierlist" @click="openCreateModal">+</button>
         <header class="choose-tierlist-header">
             <h1>Choose a Tierlist</h1>
-            <div class="toggles-row">
+            <div class="toggles-column">
                 <div class="visibility-toggle pill-container">
                     <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'show_all' }" @click="visibilityMode = 'show_all'">Show all</button>
-                    <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_without_entries' }" @click="visibilityMode = 'hide_without_entries'">Hide without entries</button>
-                    <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_hidden' }" @click="visibilityMode = 'hide_hidden'">Hide hidden</button>
+                    <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_without_entries' }" @click="visibilityMode = 'hide_without_entries'">With Data</button>
+                    <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_hidden' }" @click="visibilityMode = 'hide_hidden'">Custom</button>
                 </div>
                 <label class="toggle-label group-by-game-toggle">
                     <input type="checkbox" v-model="groupByGame" />
@@ -418,17 +437,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedGameBoy"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -439,17 +459,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedGameBoyAdvance"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -460,17 +481,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedNintendoDS"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -481,17 +503,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in grouped3DS"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -502,17 +525,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedSwitch"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -523,17 +547,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedSwitch2"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -544,17 +569,18 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedOther"
-                    :key="group.game"
+                    :key="group.firstTierlist.filename"
                     class="game-group-card"
+                    @contextmenu.prevent="onGroupContextMenu($event, group)"
                 >
                     <div class="game-group-click" @click="onGroupClick(group)">
                         <CartridgeIcon
                             :name="group.tierlists.length > 1 ? group.game + ' tierlists...' : group.firstTierlist.name"
                             :imageSource="group.firstTierlist.imageSource"
-                            :cartridgeImage="group.firstTierlist.cartridgeImage"
+                            :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -571,7 +597,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                     :key="'scott-' + i"
                     :name="t.name"
                     :imageSource="t.imageSource"
-                    :cartridgeImage="t.cartridgeImage"
+                    :cartridgeImage="effectiveCartridgeImage(t)"
                     :platform="t.platform"
                     :game="t.game"
                     :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -584,7 +610,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
             <Teleport to="body">
                 <div v-if="popoverGame" class="game-popover-overlay" @click="popoverGame = null">
                     <div class="game-popover" @click.stop>
-                        <template v-for="group in groupedByGame" :key="group.game">
+                        <template v-for="group in groupedByGame" :key="group.firstTierlist.filename">
                             <template v-if="group.game === popoverGame">
                                 <div class="game-popover-title">{{ group.game }} tierlists</div>
                                 <button
@@ -612,7 +638,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -630,7 +656,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i + 100"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -648,7 +674,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i + 200"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -666,7 +692,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'3ds-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -684,7 +710,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'switch-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -702,7 +728,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'switch2-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -720,7 +746,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'other-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -740,7 +766,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -758,7 +784,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i + 50"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -776,7 +802,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i + 100"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -794,7 +820,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="i + 200"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -812,7 +838,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'3ds-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -830,7 +856,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'switch-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -848,7 +874,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'switch2-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -866,7 +892,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                         :key="'other-' + i"
                         :name="t.name"
                         :imageSource="t.imageSource"
-                        :cartridgeImage="t.cartridgeImage"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
                         :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -888,7 +914,7 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
                     :key="'scott-' + i"
                     :name="t.name"
                     :imageSource="t.imageSource"
-                    :cartridgeImage="t.cartridgeImage"
+                    :cartridgeImage="effectiveCartridgeImage(t)"
                     :platform="t.platform"
                     :game="t.game"
                     :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
@@ -975,12 +1001,11 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
     margin: 0;
 }
 
-.toggles-row {
+.toggles-column {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 20px;
+    gap: 10px;
 }
 
 .cartridge-grid {
@@ -994,12 +1019,14 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
 
 .cartridge-row-wrapper {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     overflow-x: auto;
     overflow-y: hidden;
     padding-top: 10px;
     padding-bottom: 8px;
     margin-top: -10px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
 }
 
 .cartridge-row {
@@ -1008,6 +1035,11 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
     gap: 15px;
     flex-wrap: nowrap;
     min-width: min-content;
+    padding-left: 48px;
+    padding-right: 48px;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
 }
 
 .cartridge-row-wrapper .cartridge-row {
@@ -1036,6 +1068,31 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
 
 .scott-row {
     margin-top: 0;
+}
+
+.trash-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 38px;
+    padding: 0;
+    box-sizing: border-box;
+    background: #444;
+    color: #eee;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.trash-btn:hover {
+    filter: brightness(1.15);
+    background: #555;
+}
+
+.trash-icon {
+    width: 20px;
+    height: 20px;
 }
 
 .trash-btn.top-left {
@@ -1150,8 +1207,19 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
 
 /* Trash modal */
 .trash-modal {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 10px;
+    padding: 24px;
     min-width: 320px;
     max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.trash-modal h2 {
+    color: white;
+    margin: 0 0 16px 0;
+    font-size: 1.25rem;
 }
 .trash-empty {
     color: #999;
@@ -1229,6 +1297,9 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
 }
 
 .create-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 8px 16px;
     background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
     color: white;
@@ -1236,6 +1307,13 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
     border-radius: 6px;
     font-weight: 600;
     cursor: pointer;
+}
+
+.create-btn.top-right {
+    width: 42px;
+    height: 38px;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 .create-btn:hover {
@@ -1298,6 +1376,12 @@ function onCartridgeContextMenu(e: MouseEvent, tierlist: { visible?: boolean; na
     justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
+}
+
+.modal-actions .cancel-btn,
+.modal-actions .create-btn {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .cancel-btn {

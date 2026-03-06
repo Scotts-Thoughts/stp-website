@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 interface Props {
   name: string
@@ -16,16 +16,20 @@ defineEmits<{
   click: []
 }>()
 
+const imgError = ref(false)
+// Reset error state when the image source changes
+watch(() => props.cartridgeImage || props.imageSource || props.image, () => {
+  imgError.value = false
+})
+
 // Use cartridgeImage from JSON, then imageSource, then fall back to image prop
-// Convert absolute paths to relative for Electron compatibility
+// Convert absolute paths to relative for Electron compatibility, and encode spaces
 const displayImage = computed(() => {
   const src = props.cartridgeImage || props.imageSource || props.image
   if (!src) return undefined
-  // Convert absolute paths like /images/... to relative ./images/...
-  if (src.startsWith('/')) {
-    return '.' + src
-  }
-  return src
+  // Convert absolute paths like /images/... to relative ./images/... and encode spaces
+  const normalized = src.startsWith('/') ? '.' + src : src
+  return normalized.replace(/ /g, '%20')
 })
 </script>
 
@@ -34,8 +38,8 @@ const displayImage = computed(() => {
     <div class="cartridge-body">
       <div class="cartridge-label">
         <div class="label-content">
-          <div class="game-image" v-if="displayImage">
-            <img :src="displayImage" :alt="name" />
+          <div class="game-image" v-if="displayImage && !imgError">
+            <img :src="displayImage" :alt="name" @error="imgError = true" />
           </div>
           <div class="game-image placeholder" v-else>
             <div class="placeholder-icon">🎮</div>
