@@ -279,11 +279,6 @@ function getCartridgeColor(name: string): string {
     return 'yellow'; // default
 }
 
-// Function to determine if a cartridge is GBA based on platform
-function isGBA(platform?: string): boolean {
-    return platform === 'Game Boy Advance';
-}
-
 // ---- Trash panel ----
 const showTrashPanel = ref(false);
 const trashContents = ref<{ filename: string; name: string }[]>([]);
@@ -448,7 +443,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -470,7 +465,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -492,7 +487,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -514,7 +509,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -536,7 +531,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -558,7 +553,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -580,7 +575,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), isGBA(group.firstTierlist.platform) ? 'gba' : '', groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -600,7 +595,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                     :cartridgeImage="effectiveCartridgeImage(t)"
                     :platform="t.platform"
                     :game="t.game"
-                    :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                    :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                     @click="emit('select', workspace.tierlists.indexOf(t))"
                     @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                 />
@@ -641,7 +636,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -659,7 +654,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -677,7 +672,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -695,7 +690,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -713,7 +708,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -731,7 +726,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -749,7 +744,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -769,7 +764,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -787,7 +782,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -805,7 +800,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -823,7 +818,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -841,7 +836,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -859,7 +854,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -877,7 +872,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -895,7 +890,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -917,7 +912,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                     :cartridgeImage="effectiveCartridgeImage(t)"
                     :platform="t.platform"
                     :game="t.game"
-                    :class="[getCartridgeColor(t.name), isGBA(t.platform) ? 'gba' : '', t.visible === false ? 'hidden-tierlist' : '']"
+                    :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
                     @click="emit('select', workspace.tierlists.indexOf(t))"
                     @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                 />
@@ -1025,8 +1020,8 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
     padding-top: 10px;
     padding-bottom: 8px;
     margin-top: -10px;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%);
 }
 
 .cartridge-row {
@@ -1035,8 +1030,8 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
     gap: 15px;
     flex-wrap: nowrap;
     min-width: min-content;
-    padding-left: 48px;
-    padding-right: 48px;
+    padding-left: 16px;
+    padding-right: 16px;
     margin-left: auto;
     margin-right: auto;
     box-sizing: border-box;

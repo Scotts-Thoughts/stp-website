@@ -61,11 +61,6 @@ const displayImage = computed(() => {
   position: relative;
 }
 
-.cartridge.gba {
-  width: 136px;
-  height: 120px;
-}
-
 .cartridge:hover {
   transform: translateY(-5px);
   filter: brightness(1.1);
@@ -119,11 +114,6 @@ const displayImage = computed(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.cartridge.gba .game-image {
-  width: 102px;
-  height: 85px;
-}
-
 .game-image img {
   width: 100%;
   height: 100%;
@@ -151,10 +141,6 @@ const displayImage = computed(() => {
   line-height: 1.1;
   margin-bottom: 2px;
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.cartridge.gba .game-title {
-  font-size: 8px;
 }
 
 .game-subtitle {

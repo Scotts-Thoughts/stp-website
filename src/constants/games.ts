@@ -10,31 +10,31 @@ export type GameConfig = {
 
 export const TIERLIST_GAMES: GameConfig[] = [
   // Gen 1 - Game Boy
-  { name: 'Green (Jpn)', platform: 'Game Boy' },
-  { name: 'Red', platform: 'Game Boy' },
-  { name: 'Blue', platform: 'Game Boy' },
-  { name: 'Yellow', platform: 'Game Boy' },
+  { name: 'Green (Jpn)', platform: 'Game Boy', cartridgeImage: '/images/cover-art/Green.jpg' },
+  { name: 'Red', platform: 'Game Boy', cartridgeImage: '/images/cover-art/Red.png' },
+  { name: 'Blue', platform: 'Game Boy', cartridgeImage: '/images/cover-art/Blue.png' },
+  { name: 'Yellow', platform: 'Game Boy', cartridgeImage: '/images/cover-art/Yellow.png' },
   // Gen 2 - Game Boy Color
-  { name: 'Gold', platform: 'Game Boy Color' },
-  { name: 'Silver', platform: 'Game Boy Color' },
-  { name: 'Crystal', platform: 'Game Boy Color' },
+  { name: 'Gold', platform: 'Game Boy Color', cartridgeImage: '/images/cover-art/Gold.png' },
+  { name: 'Silver', platform: 'Game Boy Color', cartridgeImage: '/images/cover-art/Silver.png' },
+  { name: 'Crystal', platform: 'Game Boy Color', cartridgeImage: '/images/cover-art/Crystal.png' },
   // Gen 3 - Game Boy Advance
-  { name: 'Ruby', platform: 'Game Boy Advance', cartridgeImage: '/images/cartridges/3-ruby.png' },
-  { name: 'Sapphire', platform: 'Game Boy Advance', cartridgeImage: '/images/cartridges/3-sapphire.png' },
-  { name: 'Emerald', platform: 'Game Boy Advance' },
-  { name: 'FireRed', platform: 'Game Boy Advance' },
-  { name: 'LeafGreen', platform: 'Game Boy Advance' },
+  { name: 'Ruby', platform: 'Game Boy Advance', cartridgeImage: '/images/cover-art/Ruby.png' },
+  { name: 'Sapphire', platform: 'Game Boy Advance', cartridgeImage: '/images/cover-art/Sapphire.png' },
+  { name: 'Emerald', platform: 'Game Boy Advance', cartridgeImage: '/images/cover-art/Emerald.png' },
+  { name: 'FireRed', platform: 'Game Boy Advance', cartridgeImage: '/images/cover-art/FireRed.png' },
+  { name: 'LeafGreen', platform: 'Game Boy Advance', cartridgeImage: '/images/cover-art/LeafGreen.png' },
   // Gen 4 - Nintendo DS
-  { name: 'Diamond', platform: 'Nintendo DS' },
-  { name: 'Pearl', platform: 'Nintendo DS' },
-  { name: 'Platinum', platform: 'Nintendo DS' },
-  { name: 'HeartGold', platform: 'Nintendo DS' },
-  { name: 'SoulSilver', platform: 'Nintendo DS' },
+  { name: 'Diamond', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/Diamond.jpg' },
+  { name: 'Pearl', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/Pearl.jpg' },
+  { name: 'Platinum', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/Platinum.png' },
+  { name: 'HeartGold', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/HeartGold.png' },
+  { name: 'SoulSilver', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/SoulSilver.png' },
   // Gen 5 - Nintendo DS
-  { name: 'Black', platform: 'Nintendo DS' },
-  { name: 'White', platform: 'Nintendo DS' },
-  { name: 'Black 2', platform: 'Nintendo DS' },
-  { name: 'White 2', platform: 'Nintendo DS', cartridgeImage: '/images/cartridges/5-white2.png' },
+  { name: 'Black', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/Black.png' },
+  { name: 'White', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/White.png' },
+  { name: 'Black 2', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/Black2.png' },
+  { name: 'White 2', platform: 'Nintendo DS', cartridgeImage: '/images/cover-art/White2.png' },
   // Gen 6 - Nintendo 3DS
   { name: 'X', platform: 'Nintendo 3DS', cartridgeImage: '/images/cover-art/X.png' },
   { name: 'Y', platform: 'Nintendo 3DS', cartridgeImage: '/images/cover-art/Y.png' },
@@ -66,6 +66,8 @@ const GAME_ALIASES: Record<string, string> = {
   'Japanese Green': 'Green (Jpn)',
   'Green (Japanese)': 'Green (Jpn)',
   'Scarlet': 'Scarlett', // common spelling variant
+  'Black2': 'Black 2',
+  'White2': 'White 2',
 }
 
 export function getGameConfig(gameName: string): GameConfig | undefined {
