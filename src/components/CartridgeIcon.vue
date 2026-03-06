@@ -111,7 +111,7 @@ const displayImage = computed(() => {
   margin-bottom: 6px;
   border-radius: 4px;
   overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
 }
 
 .game-image img {
