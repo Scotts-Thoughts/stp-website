@@ -4,7 +4,7 @@ import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
-import { parseTime, formatTimeHMS } from '../utils/time';
+import { parseTime, formatTimeHMS, splitTime } from '../utils/time';
 
 const enum TierlistTierIndex {
     S = 0,
@@ -303,15 +303,48 @@ function unselectAll() {
 onUnmounted(unselectAll)
 
 // Threshold editing state
+// Digits stored right-to-left: index 0 = sec ones, 1 = sec tens, 2 = min ones, 3 = min tens, 4 = hour ones, 5 = hour tens. Format HH:MM:SS
 const editingThresholdIndex = ref<number | null>(null);
 const editingThresholdOriginalValue = ref<number | null>(null);
-const editingThresholdInputValue = ref<string>('');
+const thresholdDigits = ref<number[]>([]);
+
+// Format threshold digits as HH:MM:SS for display (colons inserted automatically)
+const thresholdInputDisplay = computed(() => {
+    const d = thresholdDigits.value;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const h = ((d[5] ?? 0) * 10) + (d[4] ?? 0);
+    const m = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
+    const s = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
+    return `${h}:${pad(m)}:${pad(s)}`;
+});
 
 // Check if current metric supports H:MM:SS editing
 const isTimeMetricEditable = computed(() => {
     const metric = tierlist.activeMetric;
     return metric === 'realtime' || metric === 'realtime_0';
 });
+
+// Convert ms to digit array [sec ones, sec tens, min ones, min tens, hour ones, hour tens] for HH:MM:SS
+function msToThresholdDigits(ms: number): number[] {
+    const [h, m, s] = splitTime(ms);
+    return [
+        s % 10,
+        Math.floor(s / 10),
+        m % 10,
+        Math.floor(m / 10),
+        h % 10,
+        Math.floor(h / 10)
+    ];
+}
+
+// Convert digit array to ms
+function thresholdDigitsToMs(digits: number[]): number {
+    const d = digits;
+    const h = ((d[5] ?? 0) * 10) + (d[4] ?? 0);
+    const m = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
+    const s = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
+    return ((h * 60 + m) * 60 + s) * 1000;
+}
 
 // Start editing a threshold
 function startEditingThreshold(tierIndex: number) {
@@ -331,7 +364,7 @@ function startEditingThreshold(tierIndex: number) {
     
     editingThresholdIndex.value = tierIndex;
     editingThresholdOriginalValue.value = thresholdValue;
-    editingThresholdInputValue.value = formatTimeHMS(thresholdValue, false);
+    thresholdDigits.value = []; // Start empty (0:00:00) so user enters time from scratch
     
     // Auto-focus and select text on next tick
     nextTick(() => {
@@ -347,70 +380,96 @@ function startEditingThreshold(tierIndex: number) {
 function cancelEditingThreshold() {
     editingThresholdIndex.value = null;
     editingThresholdOriginalValue.value = null;
-    editingThresholdInputValue.value = '';
+    thresholdDigits.value = [];
 }
 
-// Validate and save threshold value
+// Validate and save threshold value (in-memory only; written to file when user saves the tierlist)
 function saveThresholdValue() {
     if (editingThresholdIndex.value === null) return;
     
     const tierIndex = editingThresholdIndex.value;
-    const inputValue = editingThresholdInputValue.value.trim();
+    const digits = thresholdDigits.value;
     
-    // Validate H:MM:SS format
-    const hmmssPattern = /^\d+:\d{2}:\d{2}$/;
-    if (!hmmssPattern.test(inputValue)) {
-        toast.addToast('Invalid time format. Please use H:MM:SS format.', 'error');
+    // Clicked off without entering anything — revert to previous time
+    if (digits.length === 0) {
         cancelEditingThreshold();
         return;
     }
     
-    // Parse the time
-    let newValue: number;
-    try {
-        newValue = parseTime(inputValue);
-        if (newValue < 0) {
-            throw new Error('Invalid time value');
-        }
-    } catch (error) {
-        toast.addToast('Invalid time format. Please use H:MM:SS format.', 'error');
+    const newValue = thresholdDigitsToMs(digits);
+    
+    if (newValue < 0) {
+        toast.addToast('Invalid time value.', 'error');
         cancelEditingThreshold();
         return;
     }
     
-    // Update the threshold value
-    const thresholdList = tierlist.activeThresholdList;
-    if (!thresholdList) {
-        cancelEditingThreshold();
-        return;
-    }
-    
-    const threshold = thresholdList[tierlist.activeThresholdIndex];
+    const threshold = tierlist.activeThresholdList?.[tierlist.activeThresholdIndex]?.data;
     if (!threshold) {
         cancelEditingThreshold();
         return;
     }
     
     if (tierIndex === TierlistTierIndex.Bruno) {
-        // Bruno uses the Surge threshold value
-        threshold.data[TierlistTierIndex.Surge] = newValue;
+        threshold[TierlistTierIndex.Surge] = newValue;
     } else {
-        threshold.data[tierIndex] = newValue;
+        threshold[tierIndex] = newValue;
     }
     
     cancelEditingThreshold();
 }
 
-// Handle input keydown events
+// Add a digit from the right (new digit at index 0 = rightmost, existing digits shift left/ to higher indices; max 6 digits)
+function thresholdDigitsPush(digit: number) {
+    const d = thresholdDigits.value;
+    thresholdDigits.value = [digit, ...d].slice(0, 6);
+}
+
+// Remove rightmost digit (index 0)
+function thresholdDigitsPop() {
+    const d = thresholdDigits.value;
+    if (d.length > 0) {
+        thresholdDigits.value = d.slice(1);
+    }
+}
+
+// Handle input keydown: digits fill right-to-left; Backspace removes rightmost; colons not needed
 function handleThresholdInputKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
         event.preventDefault();
         saveThresholdValue();
-    } else if (event.key === 'Escape') {
+        return;
+    }
+    if (event.key === 'Escape') {
         event.preventDefault();
         cancelEditingThreshold();
+        return;
+    }
+    if (event.key === 'Backspace') {
+        event.preventDefault();
+        thresholdDigitsPop();
+        return;
+    }
+    if (/^\d$/.test(event.key)) {
+        event.preventDefault();
+        thresholdDigitsPush(parseInt(event.key, 10));
+        return;
+    }
+    // Block any other key that would insert text (e.g. letters, colon)
+    if (!['Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
     }
 }
+
+// Handle paste: extract digits and set from right (last 6 digits; rightmost pasted digit = rightmost on screen)
+function handleThresholdInputPaste(event: ClipboardEvent) {
+    event.preventDefault();
+    const text = (event.clipboardData?.getData('text') || '').replace(/\D/g, '');
+    if (!text) return;
+    const digitList = text.split('').map(Number).slice(-6).reverse();
+    thresholdDigits.value = digitList;
+}
+
 
 // Tier label editing state
 const editingTierLabelIndex = ref<number | null>(null);
@@ -602,10 +661,11 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
                 >{{ data.labels[i] }}</div>
                 <input
                     v-else
-                    v-model="editingThresholdInputValue"
+                    :value="thresholdInputDisplay"
                     class="threshold-input"
                     @blur="saveThresholdValue"
                     @keydown="handleThresholdInputKeydown"
+                    @paste="handleThresholdInputPaste"
                     @click.stop
                     autofocus
                 />

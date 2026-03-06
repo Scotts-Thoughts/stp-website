@@ -117,9 +117,7 @@ function updateViewSettings(key: ViewPropertyKey, updater: (oldValue: number) =>
     let newValue = updater(oldValue);
 
     if (key === 'margin') {
-        if (prev !== "") {
-            setting.margins[prev] = newValue;
-        }
+        setting.margins[prev] = newValue;
     } else if (key === 'flip') {
         setting[key] = newValue === 1;
     } else {

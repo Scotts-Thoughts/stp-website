@@ -354,7 +354,6 @@ export const useTierlist = defineStore("tierlist", () => {
             }
         }
 
-        // add neighboring pokemon name to each entry
         for (let i = 0; i < 10; i++) {
             for (let j = 0; j < groups[i].length; j++) {
                 groups[i][j].prev = groups[i][j - 1]?.pkmnName ?? "";

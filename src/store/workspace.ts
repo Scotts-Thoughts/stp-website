@@ -46,6 +46,7 @@ export const useWorkspace = defineStore("workspace", () => {
     // Backup storage for tierlist entries (keyed by filename)
     // Used to restore deleted runs if tierlist is closed without saving
     const tierlistBackups = ref<Map<string, string>>(new Map());
+
     
     // Check if running in Electron
     const runningInElectron = isElectron();
@@ -343,8 +344,8 @@ export const useWorkspace = defineStore("workspace", () => {
             }
             tierlist.filename = entry.name;
             tierlists.value.push(tierlist);
-            // Create backup from the file state (before any edits)
-            backupTierlistEntries(tierlist.filename, tierlist);
+            // Store the raw file content as backup (before any edits)
+            tierlistBackups.value.set(entry.name, data);
         }
 
         // sort tierlists by game order (same as "Create new tierlist" dropdown), then by name within same game
@@ -370,85 +371,20 @@ export const useWorkspace = defineStore("workspace", () => {
         return Result.success(undefined);
     }
 
-    // Backup tierlist entries to restore if closed without saving
     function backupTierlistEntries(filename: string, tierlist: Tierlist) {
-        const entriesRaw: any = {};
-        for (const [pkmnName, entry] of Object.entries(tierlist.entries)) {
-            const entryRaw: any = {
-                numAttempts: entry.numAttempts,
-                numFinishes: entry.numFinishes,
-                tags: entry.tags.slice(),
-                attempts: []
-            };
-            
-            for (const attempt of entry.attempts) {
-                const attemptRaw: any = {
-                    finished: attempt.finished === 1,
-                    releasedate: formatDate(attempt.releasedate)
-                };
-                
-                for (const key of METRIC_TIME_KEYS) {
-                    if (attempt[key] !== -1) {
-                        attemptRaw[key] = METRIC[key].formatValue!(attempt[key]);
-                    }
-                }
-                
-                for (const key of METRIC_NUMBER_KEYS) {
-                    if (attempt[key] !== -1) {
-                        attemptRaw[key] = attempt[key];
-                    }
-                }
-                
-                entryRaw.attempts.push(attemptRaw);
-            }
-            
-            entriesRaw[pkmnName] = entryRaw;
-        }
-        
-        tierlistBackups.value.set(filename, JSON.stringify(entriesRaw));
+        tierlistBackups.value.set(filename, stringifyTierlist(tierlist));
     }
 
-    // Restore tierlist entries from backup
     function restoreTierlistEntries(filename: string, tierlist: Tierlist) {
-        const backup = tierlistBackups.value.get(filename);
-        if (!backup) {
-            // No backup exists (shouldn't happen if loadWorkspace was called, but handle it)
-            return;
-        }
-        
-        // Restore from backup (revert unsaved changes like deletions)
-        const entriesRaw = JSON.parse(backup);
-        tierlist.entries = {};
-        
-        for (const [pkmnName, entryRaw] of Object.entries<any>(entriesRaw)) {
-            const entry = {} as TierlistEntry;
-            tierlist.entries[pkmnName] = entry;
-            
-            entry.numAttempts = entryRaw.numAttempts ?? -1;
-            entry.numFinishes = entryRaw.numFinishes ?? -1;
-            entry.tags = entryRaw.tags ?? [];
-            
-            entry.attempts = [];
-            for (const attemptRaw of entryRaw.attempts) {
-                const attempt = {} as Metrics;
-                entry.attempts.push(attempt);
-                
-                attempt.releasedate = parseDate(attemptRaw.releasedate);
-                attempt.finished = attemptRaw.finished === true ? 1 : attemptRaw.finished === false ? 0 : -1;
-                
-                for (const key of METRIC_TIME_KEYS) {
-                    attempt[key] = attemptRaw[key] !== undefined ? parseTime(attemptRaw[key]) : -1;
-                }
-                
-                for (const key of METRIC_NUMBER_KEYS) {
-                    attempt[key] = attemptRaw[key] ?? -1;
-                }
-                
-                // Calculate derived metrics
-                attempt.faults = () => addMetrics(attempt.resets!, attempt.blackouts!);
-                attempt.faults_0 = () => addMetrics(attempt.resets_0!, attempt.blackouts_0!);
-            }
-        }
+        const backupContent = tierlistBackups.value.get(filename);
+        if (!backupContent) return;
+
+        const restored = parseTierlist(backupContent);
+        if (!restored) return;
+
+        tierlist.thresholds_first = restored.thresholds_first;
+        tierlist.thresholds_best = restored.thresholds_best;
+        tierlist.entries = restored.entries;
     }
 
     return {

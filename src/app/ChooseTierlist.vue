@@ -327,6 +327,15 @@ watch(showTrashPanel, (isOpen) => {
     return () => document.removeEventListener('keydown', handler);
 });
 
+watch(showCreateModal, (isOpen) => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') showCreateModal.value = false;
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+});
+
 watch(newTierlistGame, (game) => {
     newTierlistName.value = `${game} Tierlist`;
 });
@@ -1006,7 +1015,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
 .cartridge-grid {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
     width: 100%;
     max-width: 1300px;
     padding: 15px;
@@ -1020,6 +1029,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
     padding-top: 10px;
     padding-bottom: 8px;
     margin-top: -10px;
+    margin-bottom: -8px;
     -webkit-mask-image: linear-gradient(to right, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%);
     mask-image: linear-gradient(to right, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%);
 }
