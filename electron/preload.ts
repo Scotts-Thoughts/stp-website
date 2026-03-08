@@ -24,6 +24,14 @@ contextBridge.exposeInMainWorld('electronFS', {
     ipcRenderer.invoke('fs:getWorkspacePath'),
 })
 
+// Expose update API to the renderer process
+contextBridge.exposeInMainWorld('electronUpdate', {
+  getAvailableVersion: (): Promise<string | null> =>
+    ipcRenderer.invoke('update:getAvailableVersion'),
+  install: (): Promise<void> =>
+    ipcRenderer.invoke('update:install'),
+})
+
 // Indicate that we're running in Electron
 contextBridge.exposeInMainWorld('isElectron', true)
 

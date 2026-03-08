@@ -456,6 +456,34 @@ function handleThresholdInputPaste(event: ClipboardEvent) {
     thresholdDigits.value = digitList;
 }
 
+// Tier image change (Surge = index 7, Bruno = index 8)
+function handleTierImageClick(event: MouseEvent, tierIndex: number) {
+    event.stopPropagation();
+    if (tierIndex !== TierlistTierIndex.Surge && tierIndex !== TierlistTierIndex.Bruno) return;
+
+    const tierName = tierIndex === TierlistTierIndex.Surge ? 'Surge' : 'Bruno';
+    if (!confirm(`Change the ${tierName} tier image?`)) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result as string;
+            if (tierIndex === TierlistTierIndex.Surge) {
+                tierlist.activeTierlist.surgeTierImage = dataUrl;
+            } else {
+                tierlist.activeTierlist.brunoTierImage = dataUrl;
+            }
+            workspace.saveWorkspace();
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
 
 // Tier label editing state
 const editingTierLabelIndex = ref<number | null>(null);
@@ -595,7 +623,9 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
                     maxlength="2"
                 />
                 <img v-if="tierData[i].image"
-                    class="image" :src="tierData[i].image" />
+                    class="image" :src="tierData[i].image"
+                    :class="{ 'image-clickable': i === 7 || i === 8 }"
+                    @click.stop="handleTierImageClick($event, i)" />
             </div>
             <div 
                 :class="{
@@ -1059,6 +1089,15 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     opacity: 0;
     font-family: 'Teko', sans-serif;
     font-weight: 700;
+}
+
+.category .image.image-clickable {
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.category .image.image-clickable:hover {
+    opacity: 1;
 }
 
 .category.tier-7 .image,

@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('electronDialog', {
   listExportFolder: (folderPath) => ipcRenderer.invoke('dialog:listExportFolder', folderPath),
 })
 
+// Expose update API to the renderer process
+contextBridge.exposeInMainWorld('electronUpdate', {
+  getAvailableVersion: () => ipcRenderer.invoke('update:getAvailableVersion'),
+  install: () => ipcRenderer.invoke('update:install'),
+})
+
 // Indicate that we're running in Electron
 contextBridge.exposeInMainWorld('isElectron', true)
 

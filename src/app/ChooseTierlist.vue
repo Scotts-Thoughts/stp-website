@@ -12,6 +12,19 @@ const emit = defineEmits<{
 const workspace = useWorkspace();
 const contextMenu = useContextMenu();
 
+// Update availability (Electron only)
+const availableUpdateVersion = ref<string | null>(null);
+onMounted(async () => {
+    if (window.electronUpdate) {
+        availableUpdateVersion.value = await window.electronUpdate.getAvailableVersion();
+    }
+});
+async function installUpdate() {
+    if (window.electronUpdate) {
+        await window.electronUpdate.install();
+    }
+}
+
 // 4-way visibility: show all (including hidden), only tierlists with entries, hide hidden (custom), or Scott's Tierlists only
 type VisibilityMode = 'show_all' | 'hide_without_entries' | 'hide_hidden' | 'scott_only';
 const visibilityMode = ref<VisibilityMode>('hide_hidden');
@@ -427,6 +440,19 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 <line x1="10" y1="11" x2="10" y2="17" />
                 <line x1="14" y1="11" x2="14" y2="17" />
             </svg>
+        </button>
+        <button
+            v-if="availableUpdateVersion"
+            class="update-btn top-right-second"
+            :title="'Update to v' + availableUpdateVersion"
+            @click="installUpdate"
+        >
+            <svg class="update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            v{{ availableUpdateVersion }}
         </button>
         <button class="create-btn top-right" title="Create new tierlist" @click="openCreateModal">+</button>
         <header class="choose-tierlist-header">
@@ -1109,6 +1135,35 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
     top: 30px;
     right: 40px;
     z-index: 100;
+}
+
+.update-btn.top-right-second {
+    position: absolute;
+    top: 30px;
+    right: 92px;
+    z-index: 100;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 38px;
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #2a8a4a 0%, #1e6e38 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.update-btn.top-right-second:hover {
+    filter: brightness(1.15);
+}
+
+.update-icon {
+    width: 18px;
+    height: 18px;
 }
 
 /* Pill-style 3-way selector: rounded container with contrasting selected segment */

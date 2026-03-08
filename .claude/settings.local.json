@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(GH_TOKEN=\"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\" gh release:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(ls:*)"
+    ]
+  }
+}

@@ -15,6 +15,10 @@ declare global {
       saveFile: (folderPath: string, filename: string, dataUrl: string) => Promise<{ success: boolean; path?: string; error?: string }>
       listExportFolder: (folderPath: string) => Promise<Array<{ name: string; kind: 'file' | 'directory' }>>
     }
+    electronUpdate?: {
+      getAvailableVersion: () => Promise<string | null>
+      install: () => Promise<void>
+    }
     isElectron?: boolean
   }
 }

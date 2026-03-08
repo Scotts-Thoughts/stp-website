@@ -3,6 +3,8 @@ import path from 'path'
 import fs, { Dirent } from 'fs'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
 
 const require = createRequire(import.meta.url)
 const __filename = fileURLToPath(import.meta.url)
@@ -219,10 +221,108 @@ function setupIpcHandlers(): void {
   })
 }
 
+// Update preferences file — stores whether the user dismissed updates for a specific version.
+// Resets automatically when a newer version becomes available.
+function getUpdatePrefsPath(): string {
+  return path.join(app.getPath('userData'), 'update-prefs.json')
+}
+
+function readUpdatePrefs(): { dismissedVersion?: string } {
+  try {
+    return JSON.parse(fs.readFileSync(getUpdatePrefsPath(), 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeUpdatePrefs(prefs: { dismissedVersion?: string }): void {
+  fs.writeFileSync(getUpdatePrefsPath(), JSON.stringify(prefs), 'utf-8')
+}
+
+// Tracks an available update version that the user skipped (either this session or via "Don't remind me").
+// The renderer queries this to show an update button on the Choose a Tierlist screen.
+let availableUpdateVersion: string | null = null
+
+// Check for updates before showing the main window.
+// If an update is available, prompt the user. If they accept, download, quit, and install.
+async function checkForUpdates(): Promise<void> {
+  // Skip update checks in dev mode
+  if (process.env.VITE_DEV_SERVER_URL) return
+
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    if (!result || !result.updateInfo) return
+
+    const currentVersion = app.getVersion()
+    const newVersion = result.updateInfo.version
+    if (newVersion === currentVersion) return
+
+    // Check if the user dismissed this version
+    const prefs = readUpdatePrefs()
+    if (prefs.dismissedVersion === newVersion) {
+      // Still store it so the in-app button can appear
+      availableUpdateVersion = newVersion
+      return
+    }
+
+    const response = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Available',
+      message: `A new version (v${newVersion}) is available. You are currently on v${currentVersion}.\n\nWould you like to update now?`,
+      buttons: ['Update', 'Skip', "Don't remind me"],
+      defaultId: 0,
+      cancelId: 1,
+    })
+
+    if (response.response === 2) {
+      // "Don't remind me" — save this version so we don't ask again
+      writeUpdatePrefs({ dismissedVersion: newVersion })
+      availableUpdateVersion = newVersion
+      return
+    }
+
+    if (response.response !== 0) {
+      // "Skip" — remember for the in-app button but don't persist
+      availableUpdateVersion = newVersion
+      return
+    }
+
+    // Download the update
+    await autoUpdater.downloadUpdate()
+
+    // Quit and install immediately
+    autoUpdater.quitAndInstall(false, true)
+  } catch (error) {
+    // Silently ignore update errors (e.g. no internet) and let the app start normally
+    console.error('Auto-update check failed:', error)
+  }
+}
+
+// IPC handlers for update functionality (renderer can query and trigger updates)
+function setupUpdateIpcHandlers(): void {
+  ipcMain.handle('update:getAvailableVersion', async () => {
+    return availableUpdateVersion
+  })
+
+  ipcMain.handle('update:install', async () => {
+    if (!availableUpdateVersion) return
+    await autoUpdater.downloadUpdate()
+    autoUpdater.quitAndInstall(false, true)
+  })
+}
+
 app.whenReady().then(async () => {
   await initializeWorkspace()
   ensureScottTierlistsFromBundle()
   setupIpcHandlers()
+  setupUpdateIpcHandlers()
+
+  // Check for updates before creating the window
+  await checkForUpdates()
+
   createWindow()
 
   app.on('activate', () => {
