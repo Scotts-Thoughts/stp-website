@@ -6,9 +6,25 @@ import { Tierlist, METRIC_STATIC_KEYS, METRIC_TIME_KEYS, METRIC, Metrics, Tierli
 import FS from '../utils/fs'
 import ElectronFS, { isElectron } from '../utils/electron-fs'
 import Result from '../utils/result';
-import { getGameConfig, getGameOrder } from '../constants/games';
+import { getGameConfig, getGameOrder, TIERLIST_GAMES } from '../constants/games';
 import { formatDate, parseDate, parseTime } from '../utils/time';
 import { defineStore } from 'pinia';
+
+/** Parse JSON, allowing trailing commas (which are invalid in strict JSON). */
+function parseJsonLenient(jsonStr: string): unknown {
+    try {
+        return JSON.parse(jsonStr);
+    } catch {
+        // Remove trailing commas before ] or } (repeat to handle nested structures)
+        let cleaned = jsonStr;
+        let prev: string;
+        do {
+            prev = cleaned;
+            cleaned = cleaned.replace(/,(\s*[\]}])/g, '$1');
+        } while (prev !== cleaned);
+        return JSON.parse(cleaned);
+    }
+}
 
 /** Sort tierlists by TIERLIST_GAMES order (same as create dropdown), then by name within same game. */
 function sortTierlistsByGameOrder(a: Tierlist, b: Tierlist): number {
@@ -16,6 +32,26 @@ function sortTierlistsByGameOrder(a: Tierlist, b: Tierlist): number {
     const orderB = getGameOrder(b.game);
     if (orderA !== orderB) return orderA - orderB;
     return a.name.localeCompare(b.name);
+}
+
+/** Filename for a tierlist (e.g. "Black 2" -> "black_2.json"). */
+function defaultTierlistFilename(gameName: string): string {
+    return `${gameName.toLowerCase().replace(/[^a-z0-9]/gi, '_')}.json`;
+}
+
+/** JSON shape for a blank "Default Tierlist" per game (used when creating a new workspace). */
+function blankDefaultTierlistJson(game: { name: string; platform: string; cartridgeImage?: string }) {
+    return {
+        name: 'Default Tierlist',
+        game: game.name,
+        total: [0],
+        thresholds_first: {},
+        thresholds_best: {},
+        entries: {},
+        platform: game.platform,
+        ...(game.cartridgeImage && { cartridgeImage: game.cartridgeImage }),
+        visible: true,
+    };
 }
 
 export type Workspace = {
@@ -299,24 +335,53 @@ export const useWorkspace = defineStore("workspace", () => {
     }
 
     async function loadWorkspaceWithFS(fs: FS | ElectronFS) {
-        // check if workspace is empty
-        if (await fs.isDirEmpty("")) {
-            alert("Workspace is empty. Creating a new workspace.");
+        // If workspace is empty, create a new workspace with required files and default tierlists
+        const dirEmpty = await fs.isDirEmpty("");
+        if (dirEmpty) {
             await fs.write("settings.json", "{}");
             await fs.write("pokemon.json", "{}");
+            for (const game of TIERLIST_GAMES) {
+                const filename = defaultTierlistFilename(game.name);
+                const content = JSON.stringify(blankDefaultTierlistJson(game), null, 2);
+                await fs.write(filename, content);
+            }
+        } else {
+            // Workspace has files but may be missing required files (e.g. old install) – create them if missing
+            if (!(await fs.fileExists("settings.json"))) {
+                await fs.write("settings.json", "{}");
+            }
+            if (!(await fs.fileExists("pokemon.json"))) {
+                await fs.write("pokemon.json", "{}");
+            }
+            // If there are no non-Scott tierlist files yet (none or only scott-*.json), add default tierlists
+            const entries = await fs.getDirEntries("/");
+            const hasNonScottTierlists = entries.some(
+                (e) =>
+                    e.kind === "file" &&
+                    e.name.endsWith(".json") &&
+                    !["settings.json", "pokemon.json"].includes(e.name) &&
+                    !e.name.startsWith("scott-")
+            );
+            if (!hasNonScottTierlists) {
+                for (const game of TIERLIST_GAMES) {
+                    const filename = defaultTierlistFilename(game.name);
+                    const content = JSON.stringify(blankDefaultTierlistJson(game), null, 2);
+                    await fs.write(filename, content);
+                }
+            }
         }
 
-        // check if workspace is missing any files
-        if (!await fs.fileExists("settings.json")) {
-            return Result.failure(`Workspace is missing "settings.json". Select a valid workspace.`);
+        // Load files (required files now exist)
+        try {
+            settings.value = parseJsonLenient(await fs.read("settings.json")) as any;
+        } catch (e) {
+            return Result.failure(`Invalid JSON in settings.json: ${e instanceof Error ? e.message : String(e)}`);
         }
-        if (!await fs.fileExists("pokemon.json")) {
-            return Result.failure(`Workspace is missing "pokemon.json". Select a valid workspace.`);
+        try {
+            pokemonSettings.value = parseJsonLenient(await fs.read("pokemon.json")) as PokemonSettings;
+        } catch (e) {
+            return Result.failure(`Invalid JSON in pokemon.json: ${e instanceof Error ? e.message : String(e)}`);
         }
-
-        // load files
-        settings.value = JSON.parse(await fs.read("settings.json"));
-        pokemonSettings.value = JSON.parse(await fs.read("pokemon.json")) as PokemonSettings;
 
         // Clear existing backups since we're reloading from disk
         tierlistBackups.value.clear();
@@ -337,7 +402,13 @@ export const useWorkspace = defineStore("workspace", () => {
                 continue;
             }
             const data = await fs.read(entry.name);
-            const tierlist = parseTierlist(data);
+            let tierlist: Tierlist | undefined;
+            try {
+                tierlist = parseTierlist(data);
+            } catch (e) {
+                console.warn(`Invalid JSON in ${entry.name}:`, e);
+                continue;
+            }
             if (!tierlist) {
                 console.warn(`Failed to parse tierlist: ${entry.name}`);
                 continue;
@@ -419,7 +490,7 @@ function addMetrics(a: number, b: number) {
 }
 
 function parseTierlist(data: string): Tierlist | undefined {
-    const tierlistRaw = JSON.parse(data);
+    const tierlistRaw = parseJsonLenient(data) as any;
 
     for (const key of TIERLIST_REQUIRED_KEYS) {
         if (!tierlistRaw[key]) {

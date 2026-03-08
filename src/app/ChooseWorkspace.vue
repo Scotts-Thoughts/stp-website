@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useWorkspace } from '../store';
+import { useWorkspace, useToast } from '../store';
 
 const emit = defineEmits<{
     loaded: [],
@@ -8,18 +8,30 @@ const emit = defineEmits<{
 }>();
 
 const workspace = useWorkspace();
+const toast = useToast();
 const cached = ref(await workspace.checkHandleCached());
+const loading = ref(false);
 
 async function load() {
+    if (loading.value) return;
+    loading.value = true;
     try {
         const result = await workspace.loadWorkspace();
         if (result.success) {
             emit('loaded');
         } else {
-            emit('error', 'Failed to load workspace', result.message);
+            const msg = typeof result.message === 'string' ? result.message : 'Failed to load workspace';
+            toast.addToast(msg, 'error');
+            alert(msg);
+            emit('error', msg, result.message);
         }
     } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.addToast(msg, 'error');
+        alert(msg);
         emit('error', 'Failed to load workspace', e);
+    } finally {
+        loading.value = false;
     }
 }
 
@@ -35,8 +47,9 @@ async function clear() {
     <div class="choose-workspace">
         <h1>Choose a Workspace</h1>
         <div style="height: 10px;"></div>
-        <button class="big" @click="load">
-            <template v-if=cached>
+        <button class="big" @click="load" :disabled="loading">
+            <template v-if="loading">Loading…</template>
+            <template v-else-if="cached">
                 Load Workspace from Cache
             </template>
             <template v-else>

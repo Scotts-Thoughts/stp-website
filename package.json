@@ -1,7 +1,7 @@
 {
   "name": "pokemon-tierlist-creator",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "A tierlist creator for ranking Pokemon solo challenge playthroughs",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -9,8 +9,9 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
+    "generate-workspace": "tsx scripts/generate-bundled-workspace.ts",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "electron:build": "npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder",
+    "electron:build": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder",
     "electron:preview": "npm run build && tsc -p electron/tsconfig.json && electron ."
   },
   "dependencies": {
@@ -33,7 +34,8 @@
     "vite": "^7.0.6",
     "vue": "^3.5.18",
     "vue-tsc": "^3.0.5",
-    "wait-on": "^8.0.2"
+    "wait-on": "^8.0.2",
+    "tsx": "^4.19.2"
   },
   "build": {
     "appId": "com.stp.pokemon-tierlist",

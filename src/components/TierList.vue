@@ -4,7 +4,6 @@ import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
-import { parseTime, formatTimeHMS, splitTime } from '../utils/time';
 
 const enum TierlistTierIndex {
     S = 0,
@@ -323,19 +322,6 @@ const isTimeMetricEditable = computed(() => {
     const metric = tierlist.activeMetric;
     return metric === 'realtime' || metric === 'realtime_0';
 });
-
-// Convert ms to digit array [sec ones, sec tens, min ones, min tens, hour ones, hour tens] for HH:MM:SS
-function msToThresholdDigits(ms: number): number[] {
-    const [h, m, s] = splitTime(ms);
-    return [
-        s % 10,
-        Math.floor(s / 10),
-        m % 10,
-        Math.floor(m / 10),
-        h % 10,
-        Math.floor(h / 10)
-    ];
-}
 
 // Convert digit array to ms
 function thresholdDigitsToMs(digits: number[]): number {

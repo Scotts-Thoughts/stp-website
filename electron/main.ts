@@ -25,16 +25,16 @@ function getUserDataPath(): string {
 // Initialize workspace with bundled data if it doesn't exist
 async function initializeWorkspace(): Promise<void> {
   const workspacePath = getUserDataPath()
-  
+
   // Create workspace directory if it doesn't exist
   if (!fs.existsSync(workspacePath)) {
     fs.mkdirSync(workspacePath, { recursive: true })
-    
+
     // Copy bundled workspace data
     const bundledDataPath = app.isPackaged
       ? path.join(process.resourcesPath, 'workspace')
       : path.join(__dirname, '..', 'bundled-workspace')
-    
+
     if (fs.existsSync(bundledDataPath)) {
       const files = fs.readdirSync(bundledDataPath)
       for (const file of files) {
@@ -44,6 +44,31 @@ async function initializeWorkspace(): Promise<void> {
       }
       console.log('Initialized workspace with bundled data')
     }
+  }
+}
+
+// Add any bundled Scott tierlists that are missing from the user's workspace (never overwrite existing).
+function ensureScottTierlistsFromBundle(): void {
+  const workspacePath = getUserDataPath()
+  const bundledDataPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'workspace')
+    : path.join(__dirname, '..', 'bundled-workspace')
+
+  if (!fs.existsSync(bundledDataPath) || !fs.existsSync(workspacePath)) return
+
+  const files = fs.readdirSync(bundledDataPath)
+  let added = 0
+  for (const file of files) {
+    if (file.startsWith('scott-') && file.endsWith('.json')) {
+      const destPath = path.join(workspacePath, file)
+      if (!fs.existsSync(destPath)) {
+        fs.copyFileSync(path.join(bundledDataPath, file), destPath)
+        added++
+      }
+    }
+  }
+  if (added > 0) {
+    console.log(`Added ${added} Scott tierlist(s) to workspace`)
   }
 }
 
@@ -196,6 +221,7 @@ function setupIpcHandlers(): void {
 
 app.whenReady().then(async () => {
   await initializeWorkspace()
+  ensureScottTierlistsFromBundle()
   setupIpcHandlers()
   createWindow()
 

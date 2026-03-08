@@ -60,6 +60,15 @@ function onWorkspaceLoaded() {
 }
 
 function onTierlistSelected(index: number) {
+    const tierlist = workspace.tierlists[index];
+    if (tierlist?.name === 'Default Tierlist') {
+        const name = window.prompt('Assign a name to this tierlist:', 'Default Tierlist');
+        if (name == null) return; // user cancelled
+        const trimmed = name.trim();
+        if (!trimmed) return; // empty name, stay on selection
+        tierlist.name = trimmed;
+        workspace.saveWorkspace();
+    }
     mode.value = Mode.VIEWING_TIERLIST;
     workspace.setActiveTierlist(index);
     fileexporter.unloadFolder();

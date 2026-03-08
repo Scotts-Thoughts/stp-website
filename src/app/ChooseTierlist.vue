@@ -12,8 +12,8 @@ const emit = defineEmits<{
 const workspace = useWorkspace();
 const contextMenu = useContextMenu();
 
-// 3-way visibility: show all (including hidden), only tierlists with entries, or hide hidden
-type VisibilityMode = 'show_all' | 'hide_without_entries' | 'hide_hidden';
+// 4-way visibility: show all (including hidden), only tierlists with entries, hide hidden (custom), or Scott's Tierlists only
+type VisibilityMode = 'show_all' | 'hide_without_entries' | 'hide_hidden' | 'scott_only';
 const visibilityMode = ref<VisibilityMode>('hide_hidden');
 
 // When true, show one card per game; clicking opens a popover to pick which tierlist
@@ -23,7 +23,7 @@ const popoverGame = ref<string | null>(null);
 // Persist toggle state in workspace settings and restore on load
 onMounted(() => {
     const s = workspace.settings;
-    if (s?.visibilityMode === 'show_all' || s?.visibilityMode === 'hide_without_entries' || s?.visibilityMode === 'hide_hidden') {
+    if (s?.visibilityMode === 'show_all' || s?.visibilityMode === 'hide_without_entries' || s?.visibilityMode === 'hide_hidden' || s?.visibilityMode === 'scott_only') {
         visibilityMode.value = s.visibilityMode;
     } else if (s?.showHiddenTierlists !== undefined) {
         visibilityMode.value = s.showHiddenTierlists ? 'show_all' : 'hide_hidden';
@@ -39,9 +39,12 @@ watch([visibilityMode, groupByGame], () => {
     workspace.saveWorkspace();
 });
 
-// Tierlists to display based on 3-way visibility
+// Tierlists to display based on 4-way visibility
 const visibleTierlists = computed(() => {
     const list = workspace.tierlists;
+    if (visibilityMode.value === 'scott_only') {
+        return list.filter(t => isScottTierlist(t));
+    }
     switch (visibilityMode.value) {
         case 'show_all':
             return list;
@@ -56,12 +59,15 @@ const visibleTierlists = computed(() => {
 // Separate "scott-" tierlists from the rest
 const isScottTierlist = (tierlist: { filename: string }) => tierlist.filename.startsWith('scott-');
 
+// Main tierlists (non-Scott). Scott tierlists are only shown when mode is 'scott_only'.
 const mainTierlists = computed(() => {
     return visibleTierlists.value.filter(tierlist => !isScottTierlist(tierlist));
 });
 
+// Scott tierlists: only non-empty when "Scott's Tierlists" mode is selected (only way to access them).
 const scottTierlists = computed(() => {
-    return visibleTierlists.value.filter(tierlist => isScottTierlist(tierlist));
+    if (visibilityMode.value !== 'scott_only') return [];
+    return workspace.tierlists.filter(tierlist => isScottTierlist(tierlist));
 });
 
 // Game Boy / Game Boy Color order: Green (Jpn), Red, Blue, Yellow, Gold, Silver, Crystal (by game order from TIERLIST_GAMES)
@@ -211,10 +217,12 @@ function groupHasHiddenTierlist(group: GameGroup): boolean {
 /** Convert vertical mouse wheel to horizontal scroll on the row wrapper. */
 function onRowWheel(e: WheelEvent) {
     const wrapper = e.currentTarget as HTMLElement;
-    if (wrapper) {
-        e.preventDefault();
-        wrapper.scrollLeft += e.deltaY;
-    }
+    if (!wrapper) return;
+    const hasHorizontalOverflow = wrapper.scrollWidth > wrapper.clientWidth;
+    if (!hasHorizontalOverflow) return;
+    // Prioritize horizontal scrolling on rows that have overflow
+    e.preventDefault();
+    wrapper.scrollLeft += e.deltaY;
 }
 
 // Function to get cartridge color based on game/tierlist name (fallback for backwards compatibility)
@@ -428,16 +436,40 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                     <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'show_all' }" @click="visibilityMode = 'show_all'">Show all</button>
                     <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_without_entries' }" @click="visibilityMode = 'hide_without_entries'">With Data</button>
                     <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'hide_hidden' }" @click="visibilityMode = 'hide_hidden'">Custom</button>
+                    <button type="button" class="visibility-option" :class="{ active: visibilityMode === 'scott_only' }" @click="visibilityMode = 'scott_only'">Scott's Tierlists</button>
                 </div>
                 <label class="toggle-label group-by-game-toggle">
-                    <input type="checkbox" v-model="groupByGame" />
+                    <input type="checkbox" v-model="groupByGame" :disabled="visibilityMode === 'scott_only'" />
                     Group tierlists by game
                 </label>
             </div>
         </header>
-        <div v-if="groupByGame" class="cartridge-grid grouped-grid">
+        <!-- Scott's Tierlists only: show when 4th option is selected -->
+        <div v-if="visibilityMode === 'scott_only'" class="cartridge-grid scott-only-grid">
+            <div class="scott-section">
+                <h2 class="scott-header">Scott's Tierlists</h2>
+            </div>
+            <p v-if="scottTierlists.length === 0" class="scott-empty">No Scott tierlists in this workspace.</p>
+            <div v-else class="cartridge-row-wrapper" @wheel="onRowWheel">
+                <div class="cartridge-row scott-row">
+                    <CartridgeIcon
+                        v-for="(t, i) in scottTierlists"
+                        :key="'scott-' + i"
+                        :name="t.name"
+                        :imageSource="t.imageSource"
+                        :cartridgeImage="effectiveCartridgeImage(t)"
+                        :platform="t.platform"
+                        :game="t.game"
+                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        @click="emit('select', workspace.tierlists.indexOf(t))"
+                        @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
+                    />
+                </div>
+            </div>
+        </div>
+        <div v-else-if="groupByGame" class="cartridge-grid grouped-grid">
             <!-- Game Boy + Game Boy Color -->
-            <div v-if="groupedGameBoy.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedGameBoy.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedGameBoy"
@@ -459,7 +491,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Game Boy Advance -->
-            <div v-if="groupedGameBoyAdvance.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedGameBoyAdvance.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedGameBoyAdvance"
@@ -481,7 +513,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Nintendo DS -->
-            <div v-if="groupedNintendoDS.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedNintendoDS.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedNintendoDS"
@@ -503,7 +535,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Nintendo 3DS -->
-            <div v-if="grouped3DS.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="grouped3DS.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in grouped3DS"
@@ -525,7 +557,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Nintendo Switch -->
-            <div v-if="groupedSwitch.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedSwitch.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedSwitch"
@@ -547,7 +579,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Switch2 -->
-            <div v-if="groupedSwitch2.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedSwitch2.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedSwitch2"
@@ -569,7 +601,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             </div>
             </div>
             <!-- Other platforms (Winds, Waves, etc.) -->
-            <div v-if="groupedOther.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+            <div v-if="groupedOther.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
             <div class="cartridge-row">
                 <div
                     v-for="group in groupedOther"
@@ -588,26 +620,6 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         />
                     </div>
                 </div>
-            </div>
-            </div>
-            <!-- Scott's row when grouped -->
-            <div v-if="scottTierlists.length > 0" class="scott-section">
-                <h2 class="scott-header">Scott's Tierlists</h2>
-            </div>
-            <div v-if="scottTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
-            <div class="cartridge-row scott-row">
-                <CartridgeIcon
-                    v-for="(t, i) in scottTierlists"
-                    :key="'scott-' + i"
-                    :name="t.name"
-                    :imageSource="t.imageSource"
-                    :cartridgeImage="effectiveCartridgeImage(t)"
-                    :platform="t.platform"
-                    :game="t.game"
-                    :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
-                    @click="emit('select', workspace.tierlists.indexOf(t))"
-                    @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
-                />
             </div>
             </div>
             <!-- Popover for grouped game: pick which tierlist to open -->
@@ -635,7 +647,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             <!-- Conditional rendering: Combined or separate Game Boy rows -->
             <template v-if="shouldCombineGameBoyRows">
                 <!-- Row 1: Combined Game Boy and Game Boy Color -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in gameBoyCombinedTierlists" 
@@ -653,7 +665,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 2: Game Boy Advance -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in gameBoyAdvanceTierlists" 
@@ -671,7 +683,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 3: Nintendo DS -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoDSTierlists" 
@@ -689,7 +701,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 4: Nintendo 3DS -->
-                <div v-if="nintendo3DSTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendo3DSTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendo3DSTierlists" 
@@ -707,7 +719,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 5: Nintendo Switch -->
-                <div v-if="nintendoSwitchTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendoSwitchTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoSwitchTierlists" 
@@ -725,7 +737,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 6: Switch2 -->
-                <div v-if="nintendoSwitch2Tierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendoSwitch2Tierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoSwitch2Tierlists" 
@@ -743,7 +755,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 7: Other (Winds, Waves, etc.) -->
-                <div v-if="otherTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="otherTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in otherTierlists" 
@@ -763,7 +775,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
             
             <template v-else>
                 <!-- Row 1: Game Boy -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in gameBoyTierlists" 
@@ -781,7 +793,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 2: Game Boy Color -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in gameBoyColorTierlists" 
@@ -799,7 +811,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 3: Game Boy Advance -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in gameBoyAdvanceTierlists" 
@@ -817,7 +829,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 4: Nintendo DS -->
-                <div class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoDSTierlists" 
@@ -835,7 +847,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 5: Nintendo 3DS -->
-                <div v-if="nintendo3DSTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendo3DSTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendo3DSTierlists" 
@@ -853,7 +865,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 6: Nintendo Switch -->
-                <div v-if="nintendoSwitchTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendoSwitchTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoSwitchTierlists" 
@@ -871,7 +883,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 7: Switch2 -->
-                <div v-if="nintendoSwitch2Tierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="nintendoSwitch2Tierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in nintendoSwitch2Tierlists" 
@@ -889,7 +901,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 
                 <!-- Row 8: Other (Winds, Waves, etc.) -->
-                <div v-if="otherTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
+                <div v-if="otherTierlists.length > 0" class="cartridge-row-wrapper" @wheel="onRowWheel">
                 <div class="cartridge-row">
                     <CartridgeIcon 
                         v-for="(t, i) in otherTierlists" 
@@ -906,27 +918,6 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 </div>
                 </div>
             </template>
-            
-            <!-- Scott's Personal Tierlists Row -->
-            <div v-if="scottTierlists.length > 0" class="scott-section">
-                <h2 class="scott-header">Scott's Tierlists</h2>
-            </div>
-            <div v-if="scottTierlists.length > 0" class="cartridge-row-wrapper" @wheel.prevent="onRowWheel">
-            <div class="cartridge-row scott-row">
-                <CartridgeIcon 
-                    v-for="(t, i) in scottTierlists" 
-                    :key="'scott-' + i"
-                    :name="t.name"
-                    :imageSource="t.imageSource"
-                    :cartridgeImage="effectiveCartridgeImage(t)"
-                    :platform="t.platform"
-                    :game="t.game"
-                    :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
-                    @click="emit('select', workspace.tierlists.indexOf(t))"
-                    @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
-                />
-            </div>
-            </div>
         </div>
         
         <!-- Trash panel -->
@@ -1069,6 +1060,12 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
     font-size: 1.5rem;
     margin: 0;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.scott-empty {
+    color: #aaa;
+    margin: 0;
+    padding: 20px;
 }
 
 .scott-row {
