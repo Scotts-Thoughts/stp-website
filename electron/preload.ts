@@ -24,6 +24,16 @@ contextBridge.exposeInMainWorld('electronFS', {
     ipcRenderer.invoke('fs:getWorkspacePath'),
 })
 
+// Expose workspace management API to the renderer process
+contextBridge.exposeInMainWorld('electronWorkspace', {
+  changeDirectory: (): Promise<string | null> =>
+    ipcRenderer.invoke('workspace:changeDirectory'),
+  resetDirectory: (): Promise<string> =>
+    ipcRenderer.invoke('workspace:resetDirectory'),
+  isCustomDirectory: (): Promise<boolean> =>
+    ipcRenderer.invoke('workspace:isCustomDirectory'),
+})
+
 // Expose update API to the renderer process
 contextBridge.exposeInMainWorld('electronUpdate', {
   getAvailableVersion: (): Promise<string | null> =>

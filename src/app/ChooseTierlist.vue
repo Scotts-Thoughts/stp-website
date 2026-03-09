@@ -14,14 +14,34 @@ const contextMenu = useContextMenu();
 
 // Update availability (Electron only)
 const availableUpdateVersion = ref<string | null>(null);
+const isCustomWorkspaceDir = ref(false);
+const currentWorkspacePath = ref('');
 onMounted(async () => {
     if (window.electronUpdate) {
         availableUpdateVersion.value = await window.electronUpdate.getAvailableVersion();
+    }
+    if (window.electronWorkspace) {
+        isCustomWorkspaceDir.value = await window.electronWorkspace.isCustomDirectory();
+    }
+    if (window.electronFS) {
+        currentWorkspacePath.value = await window.electronFS.getWorkspacePath();
     }
 });
 async function installUpdate() {
     if (window.electronUpdate) {
         await window.electronUpdate.install();
+    }
+}
+
+async function changeWorkspaceDirectory() {
+    if (window.electronWorkspace) {
+        await window.electronWorkspace.changeDirectory();
+    }
+}
+
+async function resetWorkspaceDirectory() {
+    if (window.electronWorkspace) {
+        await window.electronWorkspace.resetDirectory();
     }
 }
 
@@ -439,6 +459,11 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 <line x1="10" y1="11" x2="10" y2="17" />
                 <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+        </button>
+        <button v-if="workspace.runningInElectron" type="button" class="folder-btn top-left-second" :class="{ 'is-custom': isCustomWorkspaceDir }" :title="'Workspace: ' + currentWorkspacePath" @click="changeWorkspaceDirectory" @contextmenu.prevent="resetWorkspaceDirectory" aria-label="Change workspace folder">
+            <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             </svg>
         </button>
         <button
@@ -1121,6 +1146,46 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
 .trash-icon {
     width: 20px;
     height: 20px;
+}
+
+.folder-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 38px;
+    padding: 0;
+    box-sizing: border-box;
+    background: #444;
+    color: #eee;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.folder-btn:hover {
+    filter: brightness(1.15);
+    background: #555;
+}
+
+.folder-btn.is-custom {
+    background: #4a6fa5;
+}
+
+.folder-btn.is-custom:hover {
+    background: #5a7fb5;
+}
+
+.folder-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.folder-btn.top-left-second {
+    position: absolute;
+    top: 30px;
+    left: 92px;
+    z-index: 100;
 }
 
 .trash-btn.top-left {

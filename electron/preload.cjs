@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld('electronDialog', {
   listExportFolder: (folderPath) => ipcRenderer.invoke('dialog:listExportFolder', folderPath),
 })
 
+// Expose workspace management API to the renderer process
+contextBridge.exposeInMainWorld('electronWorkspace', {
+  changeDirectory: () => ipcRenderer.invoke('workspace:changeDirectory'),
+  resetDirectory: () => ipcRenderer.invoke('workspace:resetDirectory'),
+  isCustomDirectory: () => ipcRenderer.invoke('workspace:isCustomDirectory'),
+})
+
 // Expose update API to the renderer process
 contextBridge.exposeInMainWorld('electronUpdate', {
   getAvailableVersion: () => ipcRenderer.invoke('update:getAvailableVersion'),

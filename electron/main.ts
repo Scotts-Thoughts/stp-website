@@ -19,8 +19,31 @@ try {
   // electron-squirrel-startup not available in dev mode
 }
 
+// Workspace directory preferences — stores a custom workspace path if the user has changed it.
+function getWorkspacePrefsPath(): string {
+  return path.join(app.getPath('userData'), 'workspace-prefs.json')
+}
+
+function readWorkspacePrefs(): { workspacePath?: string } {
+  try {
+    return JSON.parse(fs.readFileSync(getWorkspacePrefsPath(), 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeWorkspacePrefs(prefs: { workspacePath?: string }): void {
+  fs.writeFileSync(getWorkspacePrefsPath(), JSON.stringify(prefs), 'utf-8')
+}
+
 // Get the user data path for storing tierlists
 function getUserDataPath(): string {
+  const prefs = readWorkspacePrefs()
+  if (prefs.workspacePath) return prefs.workspacePath
+  return path.join(app.getPath('userData'), 'workspace')
+}
+
+function getDefaultWorkspacePath(): string {
   return path.join(app.getPath('userData'), 'workspace')
 }
 
@@ -112,10 +135,8 @@ function createWindow(): void {
 
 // IPC Handlers for file system operations
 function setupIpcHandlers(): void {
-  const workspacePath = getUserDataPath()
-
   ipcMain.handle('fs:readFile', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {
-    const filePath = path.join(workspacePath, filename)
+    const filePath = path.join(getUserDataPath(), filename)
     try {
       return fs.readFileSync(filePath, 'utf-8')
     } catch (error) {
@@ -124,13 +145,14 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:writeFile', async (_event: Electron.IpcMainInvokeEvent, filename: string, content: string) => {
+    const wsPath = getUserDataPath()
     if (filename.startsWith('trash/')) {
-      const trashPath = path.join(workspacePath, 'trash')
+      const trashPath = path.join(wsPath, 'trash')
       if (!fs.existsSync(trashPath)) {
         fs.mkdirSync(trashPath, { recursive: true })
       }
     }
-    const filePath = path.join(workspacePath, filename)
+    const filePath = path.join(wsPath, filename)
     try {
       fs.writeFileSync(filePath, content, 'utf-8')
       return true
@@ -140,13 +162,13 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:fileExists', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {
-    const filePath = path.join(workspacePath, filename)
+    const filePath = path.join(getUserDataPath(), filename)
     return fs.existsSync(filePath)
   })
 
   ipcMain.handle('fs:listFiles', async () => {
     try {
-      const entries = fs.readdirSync(workspacePath, { withFileTypes: true })
+      const entries = fs.readdirSync(getUserDataPath(), { withFileTypes: true })
       return entries.map((entry: Dirent) => ({
         name: entry.name,
         kind: entry.isDirectory() ? 'directory' : 'file'
@@ -157,7 +179,7 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:listTrash', async () => {
-    const trashPath = path.join(workspacePath, 'trash')
+    const trashPath = path.join(getUserDataPath(), 'trash')
     try {
       if (!fs.existsSync(trashPath)) return []
       const entries = fs.readdirSync(trashPath, { withFileTypes: true })
@@ -170,7 +192,7 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:deleteFile', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {
-    const filePath = path.join(workspacePath, filename)
+    const filePath = path.join(getUserDataPath(), filename)
     try {
       fs.unlinkSync(filePath)
       return true
@@ -180,7 +202,45 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('fs:getWorkspacePath', async () => {
-    return workspacePath
+    return getUserDataPath()
+  })
+
+  // Workspace directory management
+  ipcMain.handle('workspace:changeDirectory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select Workspace Folder',
+      defaultPath: getUserDataPath(),
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    const newPath = result.filePaths[0]
+    writeWorkspacePrefs({ workspacePath: newPath })
+    // Re-initialize the new workspace and reload the app
+    await initializeWorkspace()
+    ensureScottTierlistsFromBundle()
+    const windows = BrowserWindow.getAllWindows()
+    for (const win of windows) {
+      win.webContents.reload()
+    }
+    return newPath
+  })
+
+  ipcMain.handle('workspace:resetDirectory', async () => {
+    writeWorkspacePrefs({})
+    await initializeWorkspace()
+    ensureScottTierlistsFromBundle()
+    const windows = BrowserWindow.getAllWindows()
+    for (const win of windows) {
+      win.webContents.reload()
+    }
+    return getDefaultWorkspacePath()
+  })
+
+  ipcMain.handle('workspace:isCustomDirectory', async () => {
+    const prefs = readWorkspacePrefs()
+    return !!prefs.workspacePath
   })
 
   // Dialog handlers for export functionality

@@ -10,6 +10,11 @@ declare global {
       deleteFile: (filename: string) => Promise<boolean>
       getWorkspacePath: () => Promise<string>
     }
+    electronWorkspace?: {
+      changeDirectory: () => Promise<string | null>
+      resetDirectory: () => Promise<string>
+      isCustomDirectory: () => Promise<boolean>
+    }
     electronDialog?: {
       selectFolder: () => Promise<string | null>
       saveFile: (folderPath: string, filename: string, dataUrl: string) => Promise<{ success: boolean; path?: string; error?: string }>
