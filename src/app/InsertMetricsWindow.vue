@@ -120,6 +120,8 @@ const centeredPosition = computed(() => {
 });
 
 const pokemon = ref<string>("");
+const pokemonSearch = ref<string>("");
+const showPokemonDropdown = ref(false);
 const pokemonForm = ref<string>("");
 const alternativeMoveType = ref<string>("");
 const releasedate = ref("1970-01-01");
@@ -139,6 +141,44 @@ const basePokemonNames = computed(() => {
         return name === baseName || !pokemonForms[baseName];
     });
 });
+
+// Filtered Pokemon names based on search input
+const filteredPokemonNames = computed(() => {
+    const search = pokemonSearch.value.toLowerCase();
+    if (!search) return basePokemonNames.value;
+    return basePokemonNames.value.filter(name => name.toLowerCase().includes(search));
+});
+
+function selectPokemon(name: string) {
+    pokemon.value = name;
+    pokemonSearch.value = name;
+    showPokemonDropdown.value = false;
+}
+
+function onPokemonSearchFocus() {
+    showPokemonDropdown.value = true;
+    pokemonSearch.value = "";
+}
+
+function onPokemonSearchBlur() {
+    // Delay to allow click on dropdown item
+    setTimeout(() => {
+        showPokemonDropdown.value = false;
+        if (!pokemon.value) {
+            pokemonSearch.value = "";
+        } else {
+            pokemonSearch.value = pokemon.value;
+        }
+    }, 200);
+}
+
+function onPokemonSearchInput() {
+    showPokemonDropdown.value = true;
+    // Clear selection if user is typing something different
+    if (pokemonSearch.value !== pokemon.value) {
+        pokemon.value = "";
+    }
+}
 
 // Get available forms for the selected Pokemon
 const availableForms = computed(() => {
@@ -181,6 +221,7 @@ const finalPokemonName = computed(() => {
 
 function reset() {
     pokemon.value = "";
+    pokemonSearch.value = "";
     pokemonForm.value = "";
     alternativeMoveType.value = "";
     releasedate.value = currentDate();
@@ -256,10 +297,30 @@ function onTextareaChange(content: string) {
             <tbody>
             <tr>
                 <td>Pokemon</td>
-                <td><select v-model="pokemon">
-                    <option value="">-- Select Pokemon --</option>
-                    <option v-for="name in basePokemonNames" :value="name">{{ name }}</option>
-                </select></td>
+                <td>
+                    <div class="pokemon-search-container">
+                        <input
+                            type="text"
+                            v-model="pokemonSearch"
+                            placeholder="Search Pokemon..."
+                            @focus="onPokemonSearchFocus"
+                            @blur="onPokemonSearchBlur"
+                            @input="onPokemonSearchInput"
+                            autocomplete="off"
+                        />
+                        <div v-if="showPokemonDropdown" class="pokemon-dropdown">
+                            <div
+                                v-for="name in filteredPokemonNames"
+                                :key="name"
+                                class="pokemon-dropdown-item"
+                                @mousedown.prevent="selectPokemon(name)"
+                            >{{ name }}</div>
+                            <div v-if="filteredPokemonNames.length === 0" class="pokemon-dropdown-item no-results">
+                                No results
+                            </div>
+                        </div>
+                    </div>
+                </td>
             </tr>
 
             <tr v-if="hasForms">
@@ -348,5 +409,38 @@ input, select, button {
 }
 input:invalid {
     background-color: #f004;
+}
+.pokemon-search-container {
+    position: relative;
+}
+.pokemon-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: field;
+    color: fieldtext;
+    border: 1px solid #666;
+    z-index: 100;
+}
+.pokemon-dropdown-item {
+    padding: 4px 10px;
+    cursor: pointer;
+    text-align: left;
+}
+.pokemon-dropdown-item:hover {
+    background: highlight;
+    color: highlighttext;
+}
+.pokemon-dropdown-item.no-results {
+    cursor: default;
+    color: #999;
+    font-style: italic;
+}
+.pokemon-dropdown-item.no-results:hover {
+    background: field;
+    color: #999;
 }
 </style>
