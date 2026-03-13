@@ -84,7 +84,7 @@ const toastContext = useToast();
 }
 
 .toast.error { background: #d32f2f; }
-.toast.warning { background: #f57c00; }
+.toast.warning { background: #e6c700; color: #000; }
 .toast.info { background: #1976d2; }
 .toast.success { background: #388e3c; }
 

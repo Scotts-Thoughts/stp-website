@@ -300,12 +300,37 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 await new Promise(resolve => setTimeout(resolve, 50));
                 
                 // Export options - ensure fonts are included
+                // Build font CSS with embedded base64 fonts for reliable export
+                let fontEmbedCSS = '';
+                try {
+                    const fontFiles = [
+                        { family: 'Teko', url: '/fonts/Teko-Bold.ttf' },
+                        { family: 'play', url: '/fonts/Play-Bold.ttf' },
+                        { family: 'oseb', url: '/fonts/OpenSans-ExtraBold.ttf' },
+                        { family: 'osb', url: '/fonts/Play-Bold.ttf' },
+                        { family: 'titan', url: '/fonts/TitanOne-Regular.ttf' },
+                    ];
+                    const fontPromises = fontFiles.map(async ({ family, url }) => {
+                        const response = await fetch(url);
+                        const blob = await response.blob();
+                        const dataUrl = await new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.readAsDataURL(blob);
+                        });
+                        return `@font-face { font-family: '${family}'; src: url(${dataUrl}) format('truetype'); }`;
+                    });
+                    fontEmbedCSS = (await Promise.all(fontPromises)).join('\n');
+                } catch (e) {
+                    // Fall back to letting html-to-image handle fonts
+                }
+
                 const exportOptions = {
                     backgroundColor: "transparent",
                     cacheBust: true,
                     pixelRatio: scale,
-                    skipFonts: false,
-                    preferredFontFormat: 'woff2',
+                    skipFonts: true, // We handle fonts ourselves via fontEmbedCSS
+                    ...(fontEmbedCSS ? { fontEmbedCSS } : { skipFonts: false, preferredFontFormat: 'truetype' as const }),
                 };
                 
                 if (isElectron() && window.electronDialog && electronExportPath.value) {

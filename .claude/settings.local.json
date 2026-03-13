@@ -12,7 +12,15 @@
       "Bash(grep '\"national_dex_number\"' \"public/data/pokedex-data.js\" | cut -d':' -f2 | cut -d',' -f1 | sed 's/[^0-9]//g' | sort -n -u | wc -l)",
       "Bash(grep -o '\"national_dex_number\": [0-9]*' \"public/data/pokedex-data.js\" | cut -d':' -f2 | sed 's/^ //' | sort -n -u | tail -1)",
       "Bash(grep -o '\"national_dex_number\": [0-9]*' \"public/data/pokedex-data.js\" | cut -d':' -f2 | sed 's/^ //' | sort -n | tail -20)",
-      "Bash(cd \"A:/Dropbox/stp-projects/programs/stp-website/public/data/version-specific-pokedex-data/\" && for file in red_blue.js yellow.js gold_silver.js crystal.js ruby_sapphire.js emerald.js firered_leafgreen.js diamond_pearl.js platinum.js heartgold_soulsilver.js black2_white2.js x_y.js omega_ruby_alpha_sapphire.js sun_moon.js ultra_sun_ultra_moon.js sword_shield.js scarlet_violet.js; do echo \"=== $file ===\"; grep '^\\\\s*\"[^\"]*[\\\\\\(\\\\\\)-][^\"]*\": {' \"$file\" | sed 's/.*\"\\\\\\([^\"]*\\\\\\)\".*/\\\\1/' | sort | uniq; done)"
+      "Bash(cd \"A:/Dropbox/stp-projects/programs/stp-website/public/data/version-specific-pokedex-data/\" && for file in red_blue.js yellow.js gold_silver.js crystal.js ruby_sapphire.js emerald.js firered_leafgreen.js diamond_pearl.js platinum.js heartgold_soulsilver.js black2_white2.js x_y.js omega_ruby_alpha_sapphire.js sun_moon.js ultra_sun_ultra_moon.js sword_shield.js scarlet_violet.js; do echo \"=== $file ===\"; grep '^\\\\s*\"[^\"]*[\\\\\\(\\\\\\)-][^\"]*\": {' \"$file\" | sed 's/.*\"\\\\\\([^\"]*\\\\\\)\".*/\\\\1/' | sort | uniq; done)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -20)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -50)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vite build 2>&1 | tail -10)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('A:/Dropbox/stp-projects/programs/stp-website/test/workspace/gen1-red.json'\\)\\); print\\('total:', d.get\\('total'\\)\\)\")",
+      "Bash(for f:*)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -10)",
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -40)"
     ]
   }
 }

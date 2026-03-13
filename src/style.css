@@ -1,21 +1,21 @@
 @font-face {
-    src: url(/fonts/OpenSans-ExtraBold.ttf);
+    src: url(/fonts/OpenSans-ExtraBold.ttf) format('truetype');
     font-family: oseb;
 }
 @font-face {
-    src: url(/fonts/Play-Bold.ttf);
+    src: url(/fonts/Play-Bold.ttf) format('truetype');
     font-family: osb;
 }
 @font-face {
-    src: url(/fonts/TitanOne-Regular.ttf);
+    src: url(/fonts/TitanOne-Regular.ttf) format('truetype');
     font-family: titan;
 }
 @font-face {
-    src: url(/fonts/Play-Bold.ttf);
+    src: url(/fonts/Play-Bold.ttf) format('truetype');
     font-family: play;
 }
 @font-face {
-    src: url(/fonts/Teko-Bold.ttf);
+    src: url(/fonts/Teko-Bold.ttf) format('truetype');
     font-family: Teko;
 }
 

@@ -97,10 +97,13 @@ const pokemonForms: Record<string, string[]> = {
 
 const props = defineProps<{
     visible: boolean
+    initialFile?: File | null
+    cachedDate?: string
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
     close: []
+    imported: [date: string]
 }>();
 
 const selectedFile = ref<File | null>(null);
@@ -110,6 +113,13 @@ const errorMessage = ref<string>("");
 const runDate = ref<string>("");
 const pokemonForm = ref<string>("");
 const alternativeMoveType = ref<string>("");
+
+// Editable metric values (populated from CSV, user can override)
+const editRealtime = ref<string>("");
+const editGametime = ref<string>("");
+const editLevel = ref<string>("");
+const editResets = ref<string>("");
+const editBlackouts = ref<string>("");
 
 // Calculate centered position for the window
 const centeredPosition = computed(() => {
@@ -127,9 +137,14 @@ function reset() {
     fileContent.value = "";
     parsedData.value = [];
     errorMessage.value = "";
-    runDate.value = currentDate();
+    runDate.value = (props.initialFile && props.cachedDate) ? props.cachedDate : currentDate();
     pokemonForm.value = "";
     alternativeMoveType.value = "";
+    editRealtime.value = "";
+    editGametime.value = "";
+    editLevel.value = "";
+    editResets.value = "";
+    editBlackouts.value = "";
 }
 
 // Get the base Pokemon name from parsed CSV data
@@ -192,9 +207,33 @@ watch(() => parsedData.value, () => {
     pokemonForm.value = "";
 });
 
-watch(() => props.visible, (visible) => {
-    if (visible) reset();
+watch(() => props.visible, async (visible) => {
+    if (visible) {
+        reset();
+        // If an initial file was provided (e.g. via drag-and-drop), load it automatically
+        if (props.initialFile) {
+            await loadFile(props.initialFile);
+        }
+    }
 });
+
+async function loadFile(file: File) {
+    // Check if filename contains "simple"
+    if (!file.name.toLowerCase().includes('simple')) {
+        errorMessage.value = "File must contain 'simple' in its name";
+        return;
+    }
+
+    selectedFile.value = file;
+    errorMessage.value = "";
+
+    // Read file content
+    const content = await file.text();
+    fileContent.value = content;
+
+    // Parse CSV
+    parseCsvData(content);
+}
 
 async function selectFile() {
     try {
@@ -206,25 +245,10 @@ async function selectFile() {
                 }
             }]
         });
-        
+
         const file = await fileHandle[0].getFile();
-        
-        // Check if filename contains "simple"
-        if (!file.name.toLowerCase().includes('simple')) {
-            errorMessage.value = "File must contain 'simple' in its name";
-            return;
-        }
-        
-        selectedFile.value = file;
-        errorMessage.value = "";
-        
-        // Read file content
-        const content = await file.text();
-        fileContent.value = content;
-        
-        // Parse CSV
-        parseCsvData(content);
-        
+        await loadFile(file);
+
     } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
             errorMessage.value = "Error selecting file: " + error.message;
@@ -271,7 +295,14 @@ function parseCsvData(content: string) {
         
         parsedData.value = [row]; // Only store the last row
         errorMessage.value = "";
-        
+
+        // Populate editable fields from parsed data
+        editRealtime.value = row.real_time_hmmss || "";
+        editGametime.value = row.game_time || "";
+        editLevel.value = row.level || "";
+        editResets.value = row.resets || "";
+        editBlackouts.value = row.blackouts || "";
+
         // Debug: log the parsed data to help troubleshoot
         console.log("Parsed CSV data:", row);
         console.log("Available columns:", Object.keys(row));
@@ -291,34 +322,30 @@ async function importMetrics() {
     const row = parsedData.value[0]; // Only one row (the last row)
     
     try {
-        // Validate required fields
+        // Validate required fields using editable values
         const missingFields = [];
-        if (!row.pokemon) missingFields.push("pokemon");
-        if (!row.real_time_hmmss) missingFields.push("real_time_hmmss");
-        if (!row.game_time) missingFields.push("game_time");
-        
+        if (!row.pokemon && !finalPokemonName.value) missingFields.push("pokemon");
+        if (!editRealtime.value) missingFields.push("real_time_hmmss");
+        if (!editGametime.value) missingFields.push("game_time");
+
         if (missingFields.length > 0) {
-            errorMessage.value = `Missing required fields: ${missingFields.join(", ")}. Available columns: ${Object.keys(row).join(", ")}`;
+            errorMessage.value = `Missing required fields: ${missingFields.join(", ")}`;
             return;
         }
-        
+
         if (!runDate.value) {
             errorMessage.value = "Please select a run date";
             return;
         }
-        
-        // Parse the data according to the CSV format
+
+        // Use the editable values (user may have corrected them)
         const pokemon = finalPokemonName.value;
-        const realtime = row.real_time_hmmss;
-        const gametime = row.game_time;
-        const level = parseInt(row.level) || -1;
-        const resets = parseInt(row.resets) || -1;
-        const blackouts = parseInt(row.blackouts) || -1;
-        
-        // Handle different CSV formats - some have failures column, some don't
-        // If failures column exists, we can optionally use it, but for now we'll ignore it
-        // The key is that level and game_time are in consistent positions relative to the header
-        
+        const realtime = editRealtime.value;
+        const gametime = editGametime.value;
+        const level = parseInt(editLevel.value) || -1;
+        const resets = parseInt(editResets.value) || -1;
+        const blackouts = parseInt(editBlackouts.value) || -1;
+
         // Insert the metric (alternative move type is already in the pokemon name)
         workspace.insertActiveTierlistEntry(pokemon, {
             releasedate: parseDate(runDate.value),
@@ -330,8 +357,17 @@ async function importMetrics() {
             blackouts: blackouts,
         });
         
+        // Notify parent of the import (with the date for caching)
+        emit('imported', runDate.value);
+
+        // If opened via drag-and-drop, auto-close after import
+        if (props.initialFile) {
+            emit('close');
+            return;
+        }
+
         errorMessage.value = `Successfully imported metrics for ${pokemon} (${runDate.value})`;
-        
+
     } catch (error) {
         console.error("Error importing metrics:", row, error);
         errorMessage.value = `Failed to import metrics: ${error instanceof Error ? error.message : String(error)}`;
@@ -394,34 +430,33 @@ async function importMetrics() {
             
             <div v-if="parsedData.length > 0">
                 <h3>Final Row Data:</h3>
-                <div style="border: 1px solid #ddd; border-radius: 4px;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                        <thead style="background: #f5f5f5;">
-                            <tr>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Pokemon</th>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Real Time</th>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Game Time</th>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Level</th>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Resets</th>
-                                <th style="border: 1px solid #ddd; padding: 4px;">Blackouts</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style="border: 1px solid #ddd; padding: 4px;">
-                                    {{ finalPokemonName || parsedData[0].pokemon }}
-                                    <span v-if="hasForms && pokemonForm" style="color: #666; font-size: 11px;">
-                                        ({{ basePokemonName }})
-                                    </span>
-                                </td>
-                                <td style="border: 1px solid #ddd; padding: 4px;">{{ parsedData[0].real_time_hmmss }}</td>
-                                <td style="border: 1px solid #ddd; padding: 4px;">{{ parsedData[0].game_time }}</td>
-                                <td style="border: 1px solid #ddd; padding: 4px;">{{ parsedData[0].level }}</td>
-                                <td style="border: 1px solid #ddd; padding: 4px;">{{ parsedData[0].resets }}</td>
-                                <td style="border: 1px solid #ddd; padding: 4px;">{{ parsedData[0].blackouts }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">
+                    Pokemon: <strong style="color: #fff;">{{ finalPokemonName || parsedData[0].pokemon }}</strong>
+                    <span v-if="hasForms && pokemonForm" style="color: #666; font-size: 12px;">
+                        ({{ basePokemonName }})
+                    </span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                        <label class="field-label">Real Time</label>
+                        <input class="field-input" v-model="editRealtime" placeholder="H:MM:SS.xx" />
+                    </div>
+                    <div>
+                        <label class="field-label">Game Time</label>
+                        <input class="field-input" v-model="editGametime" placeholder="H:MM:SS" />
+                    </div>
+                    <div>
+                        <label class="field-label">Level</label>
+                        <input class="field-input" v-model="editLevel" type="number" placeholder="0" />
+                    </div>
+                    <div>
+                        <label class="field-label">Resets</label>
+                        <input class="field-input" v-model="editResets" type="number" placeholder="0" />
+                    </div>
+                    <div>
+                        <label class="field-label">Blackouts</label>
+                        <input class="field-input" v-model="editBlackouts" type="number" placeholder="0" />
+                    </div>
                 </div>
             </div>
             
@@ -458,5 +493,29 @@ button:disabled {
     background: #f0f0f0;
     color: #999;
     cursor: not-allowed;
+}
+
+.field-label {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12px;
+    color: #999;
+}
+
+.field-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2a2a2a;
+    color: #fff;
+    font-size: 14px;
+    font-family: Consolas, monospace;
+    box-sizing: border-box;
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: #4CAF50;
 }
 </style>

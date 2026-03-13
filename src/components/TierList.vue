@@ -297,9 +297,36 @@ function unselectAll() {
     tierlist.activePkmn = '';
     tierlist.activePrev = '';
     tierlist.selectedPkmn.clear();
+    showRankedPopover.value = false;
 }
 
 onUnmounted(unselectAll)
+
+// Ranked total popover state
+const showRankedPopover = ref(false);
+const newTotalInput = ref('');
+
+function selectTotal(index: number) {
+    tierlist.activeTotalIndex = index;
+    showRankedPopover.value = false;
+}
+
+function addNewTotal() {
+    const value = parseInt(newTotalInput.value);
+    if (isNaN(value) || value < 0) return;
+    tierlist.activeTierlist.total.push(value);
+    tierlist.activeTotalIndex = tierlist.activeTierlist.total.length - 1;
+    newTotalInput.value = '';
+    showRankedPopover.value = false;
+}
+
+function removeTotal(index: number) {
+    if (tierlist.activeTierlist.total.length <= 1) return;
+    tierlist.activeTierlist.total.splice(index, 1);
+    if (tierlist.activeTotalIndex >= tierlist.activeTierlist.total.length) {
+        tierlist.activeTotalIndex = tierlist.activeTierlist.total.length - 1;
+    }
+}
 
 // Threshold editing state
 // Digits stored right-to-left: index 0 = sec ones, 1 = sec tens, 2 = min ones, 3 = min tens, 4 = hour ones, 5 = hour tens. Format HH:MM:SS
@@ -713,9 +740,39 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
                 </div>
             </div>
         </template>
-        <div :class="'ranked gray-grad rounded'">
+        <div :class="'ranked gray-grad rounded'" @click.stop="showRankedPopover = !showRankedPopover">
             <span>{{ data.rankedLabel }}:</span>
             <span>{{ data.totalRanked }}/{{ data.total }}</span>
+            <!-- Ranked total popover -->
+            <div v-if="showRankedPopover" class="ranked-popover" @click.stop>
+                <div class="ranked-popover-title">Total options</div>
+                <div
+                    v-for="(value, index) in tierlist.activeTierlist.total"
+                    :key="index"
+                    class="ranked-popover-item"
+                    :class="{ active: index === tierlist.activeTotalIndex }"
+                    @click.stop="selectTotal(index)"
+                >
+                    <span>{{ value }}</span>
+                    <button
+                        v-if="tierlist.activeTierlist.total.length > 1"
+                        class="ranked-popover-remove"
+                        @click.stop="removeTotal(index)"
+                    >&times;</button>
+                </div>
+                <div class="ranked-popover-add">
+                    <input
+                        v-model="newTotalInput"
+                        type="number"
+                        min="0"
+                        placeholder="New total"
+                        class="ranked-popover-input"
+                        @keydown.enter="addNewTotal()"
+                        @click.stop
+                    />
+                    <button class="ranked-popover-add-btn" @click.stop="addNewTotal()">+</button>
+                </div>
+            </div>
         </div>
         <div class="credits-box"></div>
     </div>
@@ -1013,6 +1070,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     color: #919191;
     line-height: 1;
     font-family: "play";
+    position: relative;
+    cursor: pointer;
 }
 .ranked span:nth-child(1) {
     margin-top: 5px;
@@ -1021,6 +1080,91 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 .ranked span:nth-child(2) {
     margin-top: -4px;
     font-size: 44px;
+}
+
+.ranked-popover {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    background: #333333e8;
+    box-shadow: 0 10px 25px #000;
+    border-radius: 8px;
+    padding: 12px;
+    z-index: 10000;
+    min-width: 160px;
+    font-family: Consolas, monospace;
+    font-size: 18px;
+    color: #fff;
+    cursor: default;
+}
+.ranked-popover-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    text-align: center;
+    color: #aaa;
+}
+.ranked-popover-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.ranked-popover-item:hover {
+    background: #444;
+}
+.ranked-popover-item.active {
+    background: #1976d2;
+}
+.ranked-popover-remove {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+.ranked-popover-remove:hover {
+    color: #f44;
+}
+.ranked-popover-add {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    border-top: 1px solid #555;
+    padding-top: 8px;
+}
+.ranked-popover-input {
+    flex: 1;
+    padding: 4px 8px;
+    font-family: Consolas, monospace;
+    font-size: 16px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    width: 80px;
+}
+.ranked-popover-input:focus {
+    outline: none;
+    border-color: #1976d2;
+}
+.ranked-popover-add-btn {
+    padding: 4px 10px;
+    font-size: 18px;
+    background: #388e3c;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.ranked-popover-add-btn:hover {
+    background: #2e7d32;
 }
 
 .credits-box {

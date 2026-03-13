@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, useTemplateRef, onMounted, onUnmounted } from 'vue'
+import { ref, watch, useTemplateRef, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 
 import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace } from '../store';
@@ -13,6 +13,7 @@ import EditFilterWindow from './EditFilterWindow.vue'
 import SearchWindow from './SearchWindow.vue'
 import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
+import TimelineView from '../components/TimelineView.vue'
 import QuickCalendarPopup from '../components/QuickCalendarPopup.vue'
 
 const emit = defineEmits<{
@@ -28,6 +29,56 @@ const toast = useToast();
 
 const root = useTemplateRef("root");
 
+// Drag-and-drop CSV import
+const isDraggingOver = ref(false);
+const droppedFile = ref<File | null>(null);
+const cachedCsvDate = ref<string>("");
+let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (dragLeaveTimer) { clearTimeout(dragLeaveTimer); dragLeaveTimer = null; }
+    if (e.dataTransfer?.types.includes('Files')) {
+        isDraggingOver.value = true;
+    }
+}
+
+function onDragLeave(e: DragEvent) {
+    e.preventDefault();
+    // Short timer to avoid flickering when dragging between child elements
+    dragLeaveTimer = setTimeout(() => { isDraggingOver.value = false; }, 50);
+}
+
+function onDrop(e: DragEvent) {
+    e.preventDefault();
+    isDraggingOver.value = false;
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+        toast.addToast('Only .csv files are supported', 'error');
+        return;
+    }
+
+    // Open the CSV import window with the dropped file
+    droppedFile.value = file;
+    mode.value = Mode.INSERT_CSV_METRIC;
+}
+
+function onCsvWindowClose() {
+    mode.value = Mode.VIEWING;
+    droppedFile.value = null;
+}
+
+function onCsvImported(date: string) {
+    // Cache the date from drag-and-drop imports for reuse in the same session
+    if (droppedFile.value) {
+        cachedCsvDate.value = date;
+    }
+}
+
 // Calculate viewport scale for the tierlist wrapper
 function updateViewportScale() {
     const scaleX = window.innerWidth / 1920;
@@ -40,6 +91,15 @@ function updateViewportScale() {
 onMounted(() => {
     updateViewportScale();
     window.addEventListener('resize', updateViewportScale);
+
+    // Show which display category is active on open
+    const categoryToast: Record<string, [string, "info" | "error" | "warning"]> = {
+        first: ["Viewing First Attempts", "error"],
+        best: ["Viewing Followup Attempts", "info"],
+        recent: ["Viewing Most Recent Attempts", "warning"],
+    };
+    const [msg, type] = categoryToast[tierlist.activeCategory] ?? categoryToast.first;
+    toast.addToast(msg, type, { timeout: 2000 });
 });
 onUnmounted(() => {
     window.removeEventListener('resize', updateViewportScale);
@@ -59,13 +119,29 @@ const searchActive = ref(false);
 const prevPopoutState = ref(false);
 const tierlistTableActive = ref(false);
 const quickCalendarActive = ref(false);
+const timelineActive = ref(false);
+const timelineRef = ref<ComponentPublicInstance | null>(null);
 
 watch([mode], () => {
     // Keep shortcuts active for toggle functionality
     contextMenu.shortcutsActive = true;
 });
 
-contextMenu.setOptions([
+// Watch timeline active state to swap context menus
+watch(timelineActive, (active) => {
+    if (active) {
+        // TimelineView sets its own menu on mount via setupContextMenu
+    } else {
+        // Restore main tierlist context menu
+        setupMainContextMenu();
+    }
+});
+
+function setupMainContextMenu() {
+    contextMenu.setOptions(mainContextMenuOptions);
+}
+
+const mainContextMenuOptions = [
     // {
     //     label: () => global.hidden ? "Show Pokemon" : "Hide Pokemon",
     //     shortcut: 'R',
@@ -113,6 +189,16 @@ contextMenu.setOptions([
         }
     },
     {
+        label: () => timelineActive.value ? "Hide Timeline" : "Show Timeline",
+        shortcut: 'N',
+        action() {
+            timelineActive.value = !timelineActive.value;
+            if (timelineActive.value) {
+                toast.addToast('Timeline View', 'info', { timeout: 2000 });
+            }
+        },
+    },
+    {
         label: "Toggle Category",
         shortcut: 'D',
         action() {
@@ -121,10 +207,10 @@ contextMenu.setOptions([
                 toast.addToast("Switched to Followup Attempts", "info", { timeout: 2000 })
             } else if (tierlist.activeCategory === "best") {
                 tierlist.activeCategory = "recent";
-                toast.addToast("Switched to Most Recent Attempts", "info", { timeout: 2000 })
+                toast.addToast("Switched to Most Recent Attempts", "warning", { timeout: 2000 })
             } else {
                 tierlist.activeCategory = "first";
-                toast.addToast("Switched to First Attempts", "info", { timeout: 2000 })
+                toast.addToast("Switched to First Attempts", "error", { timeout: 2000 })
             }
         },
     },
@@ -245,7 +331,9 @@ contextMenu.setOptions([
         // hidden: global.obsPresent,
         action() { global.cycleCreditModes(); }
     },
-]);
+];
+
+contextMenu.setOptions(mainContextMenuOptions);
 
 onKeyDown(' ', (e) => {
     if (e.target !== document.body) return;
@@ -261,6 +349,7 @@ onKeyDown('Escape', (e) => {
     searchActive.value = false;
     tierlistTableActive.value = false;
     quickCalendarActive.value = false;
+    timelineActive.value = false;
     e.preventDefault();
 });
 
@@ -270,14 +359,29 @@ onKeyDown('Escape', (e) => {
 
 
 <template>
-    <div class="wrapper" :class="{ 'exporting': fileexporter.exportInProgress, 'obs-mode': global.obsPresent }" ref="root">
-        <Tierlist />
+    <div
+        class="wrapper"
+        :class="{ 'exporting': fileexporter.exportInProgress, 'obs-mode': global.obsPresent }"
+        ref="root"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop"
+    >
+        <TimelineView v-if="timelineActive" ref="timelineRef" @close="timelineActive = false" />
+        <Tierlist v-else />
+        <!-- Drop overlay -->
+        <div v-if="isDraggingOver" class="drop-overlay">
+            <div class="drop-overlay-content">
+                <div class="drop-overlay-icon">CSV</div>
+                <div class="drop-overlay-text">Drop CSV file to import results</div>
+            </div>
+        </div>
     </div>
 
     <Teleport to="#app">
         <TierListTableWindow :visible="tierlistTableActive"          @close="tierlistTableActive = false" />
         <InsertMetricsWindow :visible="mode === Mode.INSERT_METRIC"  @close="mode = Mode.VIEWING" />
-        <InsertCsvMetricsWindow :visible="mode === Mode.INSERT_CSV_METRIC"  @close="mode = Mode.VIEWING" />
+        <InsertCsvMetricsWindow :visible="mode === Mode.INSERT_CSV_METRIC" :initialFile="droppedFile" :cachedDate="cachedCsvDate" @close="onCsvWindowClose" @imported="onCsvImported" />
         <EditMetricsWindow   :visible="mode === Mode.EDIT_METRIC"    @close="mode = Mode.VIEWING" />
         <EditViewWindow      :visible="mode === Mode.EDIT_VIEW"      @close="mode = Mode.VIEWING" />
         <EditFilterWindow    :visible="mode === Mode.EDIT_FILTER"    @close="mode = Mode.VIEWING" />
@@ -322,5 +426,44 @@ onKeyDown('Escape', (e) => {
     transform: none;
     top: auto;
     left: auto;
+}
+
+/* Drop overlay */
+.drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    border: 4px dashed rgba(255, 203, 5, 0.8);
+    border-radius: 20px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.drop-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.drop-overlay-icon {
+    font-size: 64px;
+    font-weight: 700;
+    font-family: 'Teko', sans-serif;
+    color: #ffcb05;
+    background: rgba(255, 203, 5, 0.15);
+    border-radius: 16px;
+    padding: 16px 32px;
+    line-height: 1;
+}
+
+.drop-overlay-text {
+    font-size: 28px;
+    font-family: 'Play', sans-serif;
+    color: #ffffff;
+    opacity: 0.9;
 }
 </style>
