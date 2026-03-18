@@ -18,6 +18,10 @@
   "cartridgeImage": "/images/cartridges/5-black.png",
   "visible": true,
   "finalTierLabel": "Impossible",
+  "surgeTierLabel": "Skyla",
+  "surgeTierImage": "./images/skyla.png",
+  "brunoTierLabel": "Brycen",
+  "brunoTierImage": "./images/brycen.png",
   "entries": {
     "Serperior": {
       "numAttempts": 0,
@@ -68,9 +72,5 @@
         {"finished": true, "releasedate": "2025-12-31", "realtime": "1:42:47.00", "gametime": "5:13:00", "level": 65, "resets": 11, "blackouts": 4}
       ]
     }
-  },
-  "surgeTierLabel": "Skyla",
-  "surgeTierImage": "./images/skyla.png",
-  "brunoTierLabel": "Brycen",
-  "brunoTierImage": "./images/brycen.png"
+  }
 }

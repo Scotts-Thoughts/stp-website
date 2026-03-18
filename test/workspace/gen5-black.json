@@ -18,9 +18,9 @@
   "cartridgeImage": "/images/cartridges/5-black.png",
   "visible": true,
   "finalTierLabel": "Impossible",
-  "entries": {},
   "surgeTierLabel": "Skyla",
   "surgeTierImage": "./images/skyla.png",
   "brunoTierLabel": "Brycen",
-  "brunoTierImage": "./images/brycen.png"
+  "brunoTierImage": "./images/brycen.png",
+  "entries": {}
 }

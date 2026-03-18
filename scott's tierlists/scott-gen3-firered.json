@@ -1,5 +1,5 @@
 {
-  "name": "Gen 3 - FireRed Unoptimized Tierlist",
+  "name": "Scott's Thoughts - Gen 3 - FireRed Tierlist",
   "game": "FireRed",
   "total": [81],
   "thresholds_first": {
@@ -17,7 +17,7 @@
   },
   "thresholds_best": {
     "realtime": [
-      {"label": "default", "data": ["1:00:00.00", "1:10:00.00", "1:20:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:30:00.00", "3:00:00.00"]},
+      {"label": "default", "data": ["0:50:00.00", "0:55:00.00", "1:00:00.00", "1:05:00.00", "1:10:00.00", "1:20:00.00", "1:30:00.00", "1:45:00.00"]},
       {"label": "2024   ", "data": ["1:20:00.00", "1:30:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00", "2:10:00.00", "2:20:00.00", "2:30:00.00"]},
       {"label": "2025   ", "data": ["1:20:00.00", "1:30:00.00", "1:40:00.00", "1:50:00.00", "2:00:00.00", "2:10:00.00", "2:20:00.00", "2:30:00.00"]}
     ],
@@ -35,7 +35,10 @@
     "Mewtwo": {
       "numAttempts": 1,
       "numFinishes": 1,
-      "attempts": [{"finished": true, "releasedate": "1970-01-01", "realtime": "0:57:27.00", "gametime": "3:28:00", "level": 62, "resets": 4}]
+      "attempts": [
+        {"finished": true, "releasedate": "1970-01-01", "realtime": "0:57:27.00", "gametime": "3:28:00", "level": 62, "resets": 4},
+        {"finished": true, "releasedate": "1970-01-01", "realtime": "0:48:30.03", "gametime": "3:05:00", "level": 58, "resets": 1, "blackouts": 0}
+      ]
     },
     "Hitmonchan": {
       "numAttempts": 1,
@@ -45,20 +48,23 @@
     "Hypno": {
       "numAttempts": 1,
       "numFinishes": 1,
-      "attempts": [{"finished": true, "releasedate": "1970-01-01", "realtime": "1:19:04.00", "gametime": "4:35:00", "level": 69, "resets": 11}]
+      "attempts": [
+        {"finished": true, "releasedate": "1970-01-01", "realtime": "1:19:04.00", "gametime": "4:35:00", "level": 69, "resets": 11},
+        {"finished": true, "releasedate": "1970-01-01", "realtime": "0:55:47.36", "gametime": "3:24:00", "level": 65, "resets": 4, "blackouts": 0}
+      ]
     },
     "Nidoking": {
       "numAttempts": 1,
       "numFinishes": 1,
-      "attempts": [
-        {"finished": true, "releasedate": "1970-01-01", "realtime": "1:23:32.00", "gametime": "5:09:00", "level": 71, "resets": 5},
-        {"finished": true, "releasedate": "2026-03-01", "realtime": "1:10:31.92", "gametime": "4:22:00", "level": 69, "resets": 6, "blackouts": 7}
-      ]
+      "attempts": [{"finished": true, "releasedate": "1970-01-01", "realtime": "1:23:32.00", "gametime": "5:09:00", "level": 71, "resets": 5}]
     },
     "Mew": {
       "numAttempts": 1,
       "numFinishes": 1,
-      "attempts": [{"finished": true, "releasedate": "1970-01-01", "realtime": "1:25:03.00", "gametime": "5:09:00", "level": 57, "resets": 4}]
+      "attempts": [
+        {"finished": true, "releasedate": "1970-01-01", "realtime": "1:25:03.00", "gametime": "5:09:00", "level": 57, "resets": 4},
+        {"finished": true, "releasedate": "2024-12-22", "realtime": "0:55:51.12", "gametime": "3:35:00", "level": 66, "resets": 0}
+      ]
     },
     "Blastoise": {
       "numAttempts": 1,
@@ -164,7 +170,8 @@
       "numFinishes": 0,
       "tags": ["unreleased"],
       "attempts": [
-        {"finished": true, "releasedate": "2024-10-02", "realtime": "1:20:37.69", "gametime": "4:59:00", "level": 70, "resets": 6, "blackouts": 2}
+        {"finished": true, "releasedate": "2024-10-02", "realtime": "1:20:37.69", "gametime": "4:59:00", "level": 70, "resets": 6, "blackouts": 2},
+        {"finished": true, "releasedate": "2024-10-02", "realtime": "1:08:01.71", "gametime": "3:49:00", "level": 67, "resets": 14, "blackouts": 0}
       ]
     },
     "Kabutops": {
@@ -203,7 +210,10 @@
     "Mr. Mime": {
       "numAttempts": 0,
       "numFinishes": 0,
-      "attempts": [{"finished": true, "releasedate": "2024-07-11", "realtime": "1:04:27.00", "gametime": "3:35:00", "level": 63, "resets": 17}]
+      "attempts": [
+        {"finished": true, "releasedate": "2024-07-11", "realtime": "1:04:27.00", "gametime": "3:35:00", "level": 63, "resets": 17},
+        {"finished": true, "releasedate": "2024-07-11", "realtime": "0:55:06.00", "gametime": "3:28:00", "level": 62, "resets": 2}
+      ]
     },
     "Ditto": {
       "numAttempts": 1,
@@ -344,27 +354,6 @@
       "numFinishes": 0,
       "attempts": [
         {"finished": true, "releasedate": "2025-12-23", "realtime": "1:15:10.89", "gametime": "4:13:00", "level": 75, "resets": 13, "blackouts": 6}
-      ]
-    },
-    "Starmie": {
-      "numAttempts": 0,
-      "numFinishes": 0,
-      "attempts": [
-        {"finished": true, "releasedate": "2026-01-17", "realtime": "1:05:58.00", "gametime": "4:07:00", "level": 63, "resets": 5, "blackouts": 13}
-      ]
-    },
-    "Golem": {
-      "numAttempts": 0,
-      "numFinishes": 0,
-      "attempts": [
-        {"finished": true, "releasedate": "2026-02-28", "realtime": "1:11:36.06", "gametime": "4:17:00", "level": 73, "resets": 12, "blackouts": 11}
-      ]
-    },
-    "Machamp": {
-      "numAttempts": 0,
-      "numFinishes": 0,
-      "attempts": [
-        {"finished": true, "releasedate": "2026-02-28", "realtime": "1:05:40.92", "gametime": "3:50:00", "level": 62, "resets": 13, "blackouts": 5}
       ]
     }
   }

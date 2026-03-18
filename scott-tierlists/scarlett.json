@@ -1,0 +1,11 @@
+{
+  "name": "Default Tierlist",
+  "game": "Scarlett",
+  "total": [0],
+  "thresholds_first": {},
+  "thresholds_best": {},
+  "platform": "Switch2",
+  "cartridgeImage": "/images/cover-art/Scarlett.webp",
+  "visible": true,
+  "entries": {}
+}

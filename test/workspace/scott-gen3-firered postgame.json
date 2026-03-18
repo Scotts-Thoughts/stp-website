@@ -192,14 +192,14 @@
       "numAttempts": 0,
       "numFinishes": 0,
       "attempts": [
-        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:19:56.07", "gametime": "5:15:00", "level": 72, "resets": 6, "blackouts": 0},
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:19:56.07", "gametime": "5:15:00", "level": 72, "resets": 6, "blackouts": 0}
       ]
     },
     "Scyther": {
       "numAttempts": 0,
       "numFinishes": 0,
       "attempts": [
-        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:27:15.81", "gametime": "6:12:00", "level": 87, "resets": 4, "blackouts": 7},
+        {"finished": true, "releasedate": "2025-12-09", "realtime": "0:27:15.81", "gametime": "6:12:00", "level": 87, "resets": 4, "blackouts": 7}
       ]
     },
     "Gyarados": {

@@ -1,0 +1,11 @@
+{
+  "name": "Default Tierlist",
+  "game": "Gold",
+  "total": [0],
+  "thresholds_first": {},
+  "thresholds_best": {},
+  "platform": "Game Boy Color",
+  "cartridgeImage": "/images/cover-art/Gold.png",
+  "visible": true,
+  "entries": {}
+}

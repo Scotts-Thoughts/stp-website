@@ -1,0 +1,11 @@
+{
+  "name": "Default Tierlist",
+  "game": "FireRed",
+  "total": [0],
+  "thresholds_first": {},
+  "thresholds_best": {},
+  "platform": "Game Boy Advance",
+  "cartridgeImage": "/images/cover-art/FireRed.png",
+  "visible": true,
+  "entries": {}
+}
