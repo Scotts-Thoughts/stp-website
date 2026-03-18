@@ -284,7 +284,7 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 allClonedElements.forEach((el) => {
                     const htmlEl = el as HTMLElement;
                     const computedStyle = window.getComputedStyle(htmlEl);
-                    
+
                     // Copy font-related styles to ensure they're preserved
                     htmlEl.style.fontFamily = computedStyle.fontFamily;
                     htmlEl.style.fontSize = computedStyle.fontSize;
@@ -293,6 +293,18 @@ export const useFileExporter = defineStore("file-exporter", () => {
                     htmlEl.style.fontVariant = computedStyle.fontVariant;
                     htmlEl.style.letterSpacing = computedStyle.letterSpacing;
                     htmlEl.style.textRendering = computedStyle.textRendering;
+                    htmlEl.style.lineHeight = computedStyle.lineHeight;
+                });
+
+                // Fix tier label vertical centering for export
+                // html-to-image doesn't preserve the line-height-based positioning,
+                // so apply explicit flexbox centering to tier label elements in the clone
+                const tierLabels = exportWrapper.querySelectorAll('.category .label');
+                tierLabels.forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+                    htmlEl.style.display = 'flex';
+                    htmlEl.style.alignItems = 'center';
+                    htmlEl.style.justifyContent = 'center';
                 });
                 
                 // Wait for layout to settle after style changes
