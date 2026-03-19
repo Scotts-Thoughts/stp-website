@@ -627,6 +627,30 @@ function findPokemonEl(pokemon: string, tierIdx: number): HTMLElement | null {
     return tierEl.querySelector(`[data-pokemon="${CSS.escape(pokemon)}"]`) as HTMLElement | null;
 }
 
+/**
+ * Run a JS-driven animation via requestAnimationFrame.
+ * `applyFrame(t)` is called each frame with t from 0 to 1.
+ * Returns a promise that resolves when the animation completes.
+ */
+function animate(durationMs: number, applyFrame: (t: number) => void): Promise<void> {
+    return new Promise(resolve => {
+        const start = performance.now();
+        function tick() {
+            const elapsed = performance.now() - start;
+            const t = Math.min(1, elapsed / durationMs);
+            // ease-in-out cubic
+            const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            applyFrame(ease);
+            if (t < 1) {
+                requestAnimationFrame(tick);
+            } else {
+                resolve();
+            }
+        }
+        requestAnimationFrame(tick);
+    });
+}
+
 // Drive the animation sequence
 watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.IDLE) {
@@ -642,33 +666,37 @@ watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.FADE_OUT) {
         scrollPokemonIntoView(pokemon, reranking.oldTierIndex);
 
-        rerankAnimClass.value.set(pokemon, 'rerank-fade-out');
-        await sleep(FADE_OUT_MS);
+        // Animate opacity from 1 → 0 via rAF
+        const el = findPokemonEl(pokemon, reranking.oldTierIndex);
+        if (el) {
+            await animate(FADE_OUT_MS, (t) => {
+                el.style.opacity = String(1 - t);
+            });
+        }
         reranking.setPhase(RerankPhase.COLLAPSE_GAP);
         return;
     }
 
     if (phase === RerankPhase.COLLAPSE_GAP) {
-        // Measure the element's actual width so we can transition from it to 0
         const el = findPokemonEl(pokemon, reranking.oldTierIndex);
         if (el) {
+            // Measure natural width. We'll use a negative margin-right to pull
+            // neighbors in, which is much smoother than animating width.
             const w = el.getBoundingClientRect().width;
-            // Set explicit width as starting point for the transition
-            el.style.transition = 'none';
-            el.style.width = w + 'px';
-            el.style.overflow = 'hidden';
             el.style.opacity = '0';
-            el.offsetHeight; // force reflow
-            // Now transition to 0
-            el.style.transition = `width ${COLLAPSE_MS}ms ease-in-out`;
-            el.style.width = '0px';
+            el.style.overflow = 'hidden';
+
+            await animate(COLLAPSE_MS, (t) => {
+                // Shrink via margin — neighbors slide smoothly into the gap
+                el.style.marginRight = (-w * t) + 'px';
+                // Visually scale down to match
+                el.style.transform = `scaleX(${1 - t})`;
+                el.style.transformOrigin = 'left center';
+            });
         }
-        await sleep(COLLAPSE_MS);
 
         // Clean up inline styles before data change
-        if (el) {
-            el.style.cssText = '';
-        }
+        if (el) el.style.cssText = '';
 
         // ── Apply data NOW ──
         rerankAnimClass.value = new Map();
@@ -686,30 +714,27 @@ watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.OPEN_SPACE) {
         await nextTick();
 
-        // Find the element at its new position and measure its natural width
         const el = findPokemonEl(pokemon, reranking.newTierIndex);
         if (el) {
-            // Measure natural width
-            const naturalW = el.getBoundingClientRect().width;
-            // Start collapsed at 0
-            el.style.transition = 'none';
-            el.style.width = '0px';
-            el.style.overflow = 'hidden';
+            const w = el.getBoundingClientRect().width;
+
+            // Start fully collapsed
             el.style.opacity = '0';
-            el.offsetHeight; // force reflow
-            // Transition to natural width
-            el.style.transition = `width ${OPEN_MS}ms ease-in-out`;
-            el.style.width = naturalW + 'px';
-        }
+            el.style.overflow = 'hidden';
+            el.style.marginRight = (-w) + 'px';
+            el.style.transform = 'scaleX(0)';
+            el.style.transformOrigin = 'left center';
 
-        scrollPokemonIntoView(pokemon, reranking.newTierIndex);
+            scrollPokemonIntoView(pokemon, reranking.newTierIndex);
 
-        await sleep(OPEN_MS);
+            await animate(OPEN_MS, (t) => {
+                el.style.marginRight = (-w * (1 - t)) + 'px';
+                el.style.transform = `scaleX(${t})`;
+            });
 
-        // Clean up inline styles — let element return to normal flow
-        if (el) {
+            // Reset transform/margin, keep invisible for fade-in
             el.style.cssText = '';
-            el.style.opacity = '0'; // keep invisible for fade-in
+            el.style.opacity = '0';
         }
 
         reranking.setPhase(RerankPhase.FADE_IN);
@@ -719,13 +744,10 @@ watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.FADE_IN) {
         const el = findPokemonEl(pokemon, reranking.newTierIndex);
         if (el) {
-            el.style.transition = `opacity ${FADE_IN_MS}ms ease`;
-            el.style.opacity = '1';
-        }
-        await sleep(FADE_IN_MS);
-
-        // Clean up
-        if (el) {
+            el.style.opacity = '0';
+            await animate(FADE_IN_MS, (t) => {
+                el.style.opacity = String(t);
+            });
             el.style.cssText = '';
         }
 

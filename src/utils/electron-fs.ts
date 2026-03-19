@@ -24,6 +24,13 @@ declare global {
       getAvailableVersion: () => Promise<string | null>
       install: () => Promise<void>
     }
+    electronVideo?: {
+      createTempDir: () => Promise<string>
+      saveFrame: (tmpDir: string, frameIndex: number, dataUrl: string) => Promise<void>
+      encode: (tmpDir: string, outputPath: string, fps: number) => Promise<{ success: boolean; error?: string }>
+      cleanup: (tmpDir: string) => Promise<void>
+      saveFileDialog: (defaultName: string) => Promise<string | null>
+    }
     isElectron?: boolean
   }
 }

@@ -22,7 +22,10 @@
       "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -10)",
       "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -40)",
       "Bash(npx vue-tsc:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(node -e \"console.log\\(require\\(''ffmpeg-static''\\)\\)\")",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

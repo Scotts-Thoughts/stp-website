@@ -4,6 +4,7 @@ import { onKeyDown } from '@vueuse/core';
 
 import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking } from '../store';
 import { currentDate } from '../utils/time';
+import { recordRerankingAnimation } from '../utils/video-recorder';
 
 import EditViewWindow from './EditViewWindow.vue'
 import EditMetricsWindow from './EditMetricsWindow.vue'
@@ -261,6 +262,21 @@ const mainContextMenuOptions = [
         }
     },
     {
+        label: 'Export Re-Ranking as Video',
+        hidden: () => !global.animateReranking,
+        action() {
+            if (!window.electronVideo) {
+                toast.addToast('Video export requires the desktop app', 'error');
+                return;
+            }
+            if (!reranking.hasPending) {
+                toast.addToast('No pending re-ranking to export', 'warning', { timeout: 2000 });
+                return;
+            }
+            exportRerankingVideo();
+        }
+    },
+    {
         label: "", // Separator
     },
     {
@@ -368,6 +384,58 @@ onKeyDown('Escape', (e) => {
     timelineActive.value = false;
     e.preventDefault();
 });
+
+// Export re-ranking animation as transparent .mov video
+async function exportRerankingVideo() {
+    if (!reranking.hasPending || !root.value) return;
+
+    const pending = [...reranking.pendingInsertions];
+    const animPokemon = pending[pending.length - 1].pokemon;
+
+    // Find old tier
+    let oldTier = -1;
+    for (let i = 0; i < tierlist.groupedEntries.length; i++) {
+        if (tierlist.groupedEntries[i].some(e => e.pkmnName === animPokemon)) {
+            oldTier = i;
+            break;
+        }
+    }
+
+    let recordingToastId = toast.addToast('Preparing video export...', 'info', { timeout: -1, pending: true });
+
+    const success = await recordRerankingAnimation({
+        wrapperEl: root.value,
+        findOldEl() {
+            if (oldTier < 0) return null;
+            return root.value?.querySelector(`[data-pokemon="${CSS.escape(animPokemon)}"]`) as HTMLElement | null;
+        },
+        applyData() {
+            reranking.committing = true;
+            for (const ins of pending) {
+                workspace.insertActiveTierlistEntry(ins.pokemon, ins.attempt);
+            }
+            reranking.committing = false;
+            reranking.clearPending();
+        },
+        findNewEl() {
+            return root.value?.querySelector(`[data-pokemon="${CSS.escape(animPokemon)}"]`) as HTMLElement | null;
+        },
+        onProgress(p) {
+            toast.removeToast(recordingToastId);
+            if (p.phase === 'capturing') {
+                recordingToastId = toast.addToast(p.message, 'info', { timeout: -1, pending: true });
+            } else if (p.phase === 'encoding') {
+                recordingToastId = toast.addToast(p.message, 'info', { timeout: -1, pending: true });
+            } else if (p.phase === 'done') {
+                toast.addToast(p.message, 'success');
+            } else if (p.phase === 'error') {
+                toast.addToast(p.message, 'error');
+            }
+        },
+    });
+
+    if (!success) return;
+}
 
 // Ctrl+F1: Start the re-ranking animation (data is NOT applied yet — that happens mid-animation)
 onKeyDown('F1', (e) => {

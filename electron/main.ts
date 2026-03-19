@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs, { Dirent } from 'fs'
+import os from 'os'
+import { execFile } from 'child_process'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 import pkg from 'electron-updater'
@@ -278,6 +280,131 @@ function setupIpcHandlers(): void {
     } catch (error) {
       return []
     }
+  })
+
+  // --- Video export IPC handlers ---
+
+  ipcMain.handle('video:createTempDir', async () => {
+    const tmpDir = path.join(os.tmpdir(), `stp-video-${Date.now()}`)
+    fs.mkdirSync(tmpDir, { recursive: true })
+    return tmpDir
+  })
+
+  ipcMain.handle('video:saveFrame', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, frameIndex: number, dataUrl: string) => {
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '')
+    const buffer = Buffer.from(base64Data, 'base64')
+    const filename = `frame_${String(frameIndex).padStart(5, '0')}.png`
+    fs.writeFileSync(path.join(tmpDir, filename), buffer)
+  })
+
+  ipcMain.handle('video:encode', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, outputPath: string, fps: number) => {
+    // Resolve ffmpeg binary path — try multiple locations
+    const isWin = process.platform === 'win32'
+    const ffmpegBin = isWin ? 'ffmpeg.exe' : 'ffmpeg'
+    let ffmpegPath = 'ffmpeg'
+    const candidates: string[] = []
+
+    // 1. Try require('ffmpeg-static') — works in dev when node_modules is intact
+    try {
+      const fromRequire = require('ffmpeg-static')
+      if (fromRequire) candidates.push(fromRequire)
+    } catch { /* ignore */ }
+
+    // 2. Relative to compiled electron main (dist-electron/../node_modules)
+    candidates.push(path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+    // 3. Relative to app root
+    candidates.push(path.join(app.getAppPath(), 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+    // 4. Relative to process.cwd()
+    candidates.push(path.join(process.cwd(), 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+    // 5. Packaged app — extraResources
+    if (process.resourcesPath) {
+      candidates.push(path.join(process.resourcesPath, ffmpegBin))
+    }
+
+    for (const candidate of candidates) {
+      console.log('FFmpeg candidate:', candidate, fs.existsSync(candidate) ? '✓' : '✗')
+      if (fs.existsSync(candidate)) {
+        ffmpegPath = candidate
+        break
+      }
+    }
+
+    console.log('FFmpeg resolved:', ffmpegPath)
+
+    const inputPattern = path.join(tmpDir, 'frame_%05d.png')
+
+    // Try ProRes 4444 first (supports alpha), fall back to PNG-in-MOV if unavailable
+    const proResArgs = [
+      '-y',
+      '-framerate', String(fps),
+      '-i', inputPattern,
+      '-c:v', 'prores_ks',
+      '-profile:v', '4444',
+      '-pix_fmt', 'yuva444p10le',
+      '-an',
+      outputPath,
+    ]
+
+    // PNG codec fallback (universally supported, preserves alpha, larger file)
+    const pngArgs = [
+      '-y',
+      '-framerate', String(fps),
+      '-i', inputPattern,
+      '-c:v', 'png',
+      '-pix_fmt', 'rgba',
+      '-an',
+      outputPath,
+    ]
+
+    // If none of the candidates exist, report which paths were tried
+    if (ffmpegPath === 'ffmpeg') {
+      const tried = candidates.join('\n  ')
+      return { success: false, error: `FFmpeg not found. Tried:\n  ${tried}` }
+    }
+
+    function runFfmpeg(args: string[]): Promise<{ success: boolean; error?: string }> {
+      return new Promise((resolve) => {
+        console.log('FFmpeg command:', ffmpegPath, args.join(' '))
+        execFile(ffmpegPath, args, { maxBuffer: 50 * 1024 * 1024 }, (error, _stdout, stderr) => {
+          if (error) {
+            console.error('FFmpeg stderr:', stderr)
+            console.error('FFmpeg error:', error.message)
+            resolve({ success: false, error: `FFmpeg error: ${error.message}\n${stderr}` })
+          } else {
+            resolve({ success: true })
+          }
+        })
+      })
+    }
+
+    // Try ProRes first
+    let result = await runFfmpeg(proResArgs)
+    if (!result.success) {
+      console.log('ProRes failed, trying PNG codec fallback...')
+      result = await runFfmpeg(pngArgs)
+    }
+    return result
+  })
+
+  ipcMain.handle('video:cleanup', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string) => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    } catch {
+      // Ignore cleanup errors
+    }
+  })
+
+  ipcMain.handle('dialog:saveFileDialog', async (_event: Electron.IpcMainInvokeEvent, defaultName: string) => {
+    const result = await dialog.showSaveDialog({
+      title: 'Save Video',
+      defaultPath: defaultName,
+      filters: [{ name: 'QuickTime Movie', extensions: ['mov'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    return result.filePath
   })
 }
 

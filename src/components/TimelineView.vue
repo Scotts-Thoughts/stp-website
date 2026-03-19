@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, useTemplateRef, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, useTemplateRef, onMounted, onUnmounted } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
@@ -392,7 +392,7 @@ const positionedEntries = computed(() => {
         .map(entry => {
             const xPct = ((entry.value - min) / range) * 100;
             const xPx = PADDING_LEFT + (xPct / 100) * TIMELINE_WIDTH;
-            return { ...entry, xPx, yPx: 0, lineTop: 0, lineHeight: 0, isExtremeOutlier: false };
+            return { ...entry, xPx, yPx: 0, lineTop: 0, lineHeight: 0, isExtremeOutlier: false, popoutAbove: false };
         });
 
     // Add extreme outliers clamped to the right edge (always visible)
@@ -402,6 +402,7 @@ const positionedEntries = computed(() => {
             xPx: PADDING_LEFT + TIMELINE_WIDTH,
             yPx: 0, lineTop: 0, lineHeight: 0,
             isExtremeOutlier: true,
+            popoutAbove: false,
         });
     }
 
