@@ -20,7 +20,9 @@
       "Bash(python3 -c \"import json; d=json.load\\(open\\('A:/Dropbox/stp-projects/programs/stp-website/test/workspace/gen1-red.json'\\)\\); print\\('total:', d.get\\('total'\\)\\)\")",
       "Bash(for f:*)",
       "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -10)",
-      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -40)"
+      "Bash(cd \"A:\\\\Dropbox\\\\stp-projects\\\\programs\\\\stp-website\" && npx vue-tsc --noEmit 2>&1 | head -40)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

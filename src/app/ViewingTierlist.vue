@@ -2,7 +2,7 @@
 import { ref, watch, useTemplateRef, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 
-import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace } from '../store';
+import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking } from '../store';
 import { currentDate } from '../utils/time';
 
 import EditViewWindow from './EditViewWindow.vue'
@@ -26,6 +26,7 @@ const workspace = useWorkspace();
 const contextMenu = useContextMenu();
 const fileexporter = useFileExporter();
 const toast = useToast();
+const reranking = useReranking();
 
 const root = useTemplateRef("root");
 
@@ -245,6 +246,21 @@ const mainContextMenuOptions = [
         }
     },
     {
+        label: () => global.animateReranking ? "Animate Re-Ranking: ON" : "Animate Re-Ranking: OFF",
+        action() {
+            global.animateReranking = !global.animateReranking;
+            toast.addToast(
+                global.animateReranking ? 'Animate Re-Ranking enabled (Ctrl+F1 to confirm)' : 'Animate Re-Ranking disabled',
+                'info',
+                { timeout: 2000 }
+            );
+            // Clear any pending insertions when disabling
+            if (!global.animateReranking) {
+                reranking.clearPending();
+            }
+        }
+    },
+    {
         label: "", // Separator
     },
     {
@@ -353,6 +369,38 @@ onKeyDown('Escape', (e) => {
     e.preventDefault();
 });
 
+// Ctrl+F1: Start the re-ranking animation (data is NOT applied yet — that happens mid-animation)
+onKeyDown('F1', (e) => {
+    if (!e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+
+    if (!global.animateReranking || !reranking.hasPending) {
+        if (global.animateReranking) {
+            toast.addToast('No pending re-ranking to apply', 'warning', { timeout: 2000 });
+        }
+        return;
+    }
+
+    if (reranking.isAnimating) return; // already running
+
+    // Figure out which pokemon we're animating (last pending insertion)
+    const pending = [...reranking.pendingInsertions];
+    const lastInsertion = pending[pending.length - 1];
+    const animPokemon = lastInsertion.pokemon;
+
+    // Find the old position (if the pokemon already exists in the tierlist)
+    let oldTier = -1;
+    for (let i = 0; i < tierlist.groupedEntries.length; i++) {
+        if (tierlist.groupedEntries[i].some(e => e.pkmnName === animPokemon)) {
+            oldTier = i;
+            break;
+        }
+    }
+
+    // Start the animation — data stays unchanged, the entry is still at its old position
+    // The TierList component will apply the data between COLLAPSE_GAP and OPEN_SPACE
+    reranking.startAnimation(animPokemon, oldTier, -1);
+});
 
 
 </script>

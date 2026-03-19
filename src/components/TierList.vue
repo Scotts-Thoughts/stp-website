@@ -2,7 +2,7 @@
 import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
-import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace } from '../store';
+import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
 
 const enum TierlistTierIndex {
@@ -23,6 +23,7 @@ const tierlist = useTierlist();
 const fileexporter = useFileExporter();
 const toast = useToast();
 const workspace = useWorkspace();
+const reranking = useReranking();
 
 // Track scroll state for each tier row
 const tierScrollState = reactive<Record<number, { 
@@ -585,6 +586,197 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
     }
 }
 
+// --- Animate Re-Ranking ---
+//
+// The animation happens in two halves, with data applied in between:
+//
+//   HALF 1 (entry is still at its OLD position — data not yet applied):
+//     FADE_OUT (1s)     — slowly fade the entry to invisible
+//     COLLAPSE_GAP (1s) — collapse its width to 0; neighbors slide in to fill the gap
+//
+//   >>> data is applied here — Vue re-renders, entry moves to its NEW position <<<
+//
+//   HALF 2 (entry is now at its NEW position):
+//     OPEN_SPACE (1s)   — entry starts at 0 width, expands; neighbors slide apart
+//     FADE_IN (0.6s)    — fade in + highlight glow
+//
+// Total ≈ 4 seconds.
+
+const FADE_OUT_MS  = 1000;
+const COLLAPSE_MS  = 1000;
+const OPEN_MS      = 1000;
+const FADE_IN_MS   = 600;
+const HIGHLIGHT_MS = 800;
+
+// Track which entry is currently animating and its CSS class
+const rerankAnimClass = ref<Map<string, string>>(new Map());
+
+function getRerankClass(pkmnName: string): string {
+    return rerankAnimClass.value.get(pkmnName) || '';
+}
+
+function isRerankHighlighting(pkmnName: string): boolean {
+    return reranking.isAnimating && pkmnName === reranking.animatingPokemon;
+}
+
+/** Find the PkmnImage DOM element for a pokemon in a given tier. */
+function findPokemonEl(pokemon: string, tierIdx: number): HTMLElement | null {
+    if (tierIdx < 0) return null;
+    const tierEl = tierRowRefs.value.get(tierIdx);
+    if (!tierEl) return null;
+    return tierEl.querySelector(`[data-pokemon="${CSS.escape(pokemon)}"]`) as HTMLElement | null;
+}
+
+// Drive the animation sequence
+watch(() => reranking.phase, async (phase) => {
+    if (phase === RerankPhase.IDLE) {
+        rerankAnimClass.value = new Map();
+        return;
+    }
+
+    const pokemon = reranking.animatingPokemon;
+    if (!pokemon) return;
+
+    // ── HALF 1: animate at the OLD position (data unchanged) ──
+
+    if (phase === RerankPhase.FADE_OUT) {
+        scrollPokemonIntoView(pokemon, reranking.oldTierIndex);
+
+        rerankAnimClass.value.set(pokemon, 'rerank-fade-out');
+        await sleep(FADE_OUT_MS);
+        reranking.setPhase(RerankPhase.COLLAPSE_GAP);
+        return;
+    }
+
+    if (phase === RerankPhase.COLLAPSE_GAP) {
+        // Measure the element's actual width so we can transition from it to 0
+        const el = findPokemonEl(pokemon, reranking.oldTierIndex);
+        if (el) {
+            const w = el.getBoundingClientRect().width;
+            // Set explicit width as starting point for the transition
+            el.style.transition = 'none';
+            el.style.width = w + 'px';
+            el.style.overflow = 'hidden';
+            el.style.opacity = '0';
+            el.offsetHeight; // force reflow
+            // Now transition to 0
+            el.style.transition = `width ${COLLAPSE_MS}ms ease-in-out`;
+            el.style.width = '0px';
+        }
+        await sleep(COLLAPSE_MS);
+
+        // Clean up inline styles before data change
+        if (el) {
+            el.style.cssText = '';
+        }
+
+        // ── Apply data NOW ──
+        rerankAnimClass.value = new Map();
+        applyPendingInsertions();
+
+        await nextTick();
+        await nextTick();
+
+        reranking.setPhase(RerankPhase.OPEN_SPACE);
+        return;
+    }
+
+    // ── HALF 2: animate at the NEW position (data applied) ──
+
+    if (phase === RerankPhase.OPEN_SPACE) {
+        await nextTick();
+
+        // Find the element at its new position and measure its natural width
+        const el = findPokemonEl(pokemon, reranking.newTierIndex);
+        if (el) {
+            // Measure natural width
+            const naturalW = el.getBoundingClientRect().width;
+            // Start collapsed at 0
+            el.style.transition = 'none';
+            el.style.width = '0px';
+            el.style.overflow = 'hidden';
+            el.style.opacity = '0';
+            el.offsetHeight; // force reflow
+            // Transition to natural width
+            el.style.transition = `width ${OPEN_MS}ms ease-in-out`;
+            el.style.width = naturalW + 'px';
+        }
+
+        scrollPokemonIntoView(pokemon, reranking.newTierIndex);
+
+        await sleep(OPEN_MS);
+
+        // Clean up inline styles — let element return to normal flow
+        if (el) {
+            el.style.cssText = '';
+            el.style.opacity = '0'; // keep invisible for fade-in
+        }
+
+        reranking.setPhase(RerankPhase.FADE_IN);
+        return;
+    }
+
+    if (phase === RerankPhase.FADE_IN) {
+        const el = findPokemonEl(pokemon, reranking.newTierIndex);
+        if (el) {
+            el.style.transition = `opacity ${FADE_IN_MS}ms ease`;
+            el.style.opacity = '1';
+        }
+        await sleep(FADE_IN_MS);
+
+        // Clean up
+        if (el) {
+            el.style.cssText = '';
+        }
+
+        reranking.setPhase(RerankPhase.HIGHLIGHT);
+        return;
+    }
+
+    if (phase === RerankPhase.HIGHLIGHT) {
+        rerankAnimClass.value.set(pokemon, 'rerank-highlight');
+        await sleep(HIGHLIGHT_MS);
+        reranking.finishAnimation();
+    }
+});
+
+/** Apply all buffered insertions to the real store and figure out the new tier. */
+function applyPendingInsertions() {
+    const pending = [...reranking.pendingInsertions];
+    reranking.committing = true;
+    for (const insertion of pending) {
+        workspace.insertActiveTierlistEntry(insertion.pokemon, insertion.attempt);
+    }
+    reranking.committing = false;
+    reranking.clearPending();
+
+    // Now find which tier the pokemon ended up in
+    const pokemon = reranking.animatingPokemon;
+    for (let i = 0; i < tierlist.groupedEntries.length; i++) {
+        if (tierlist.groupedEntries[i].some(e => e.pkmnName === pokemon)) {
+            reranking.newTierIndex = i;
+            break;
+        }
+    }
+}
+
+/** Scroll a pokemon's DOM element into view within its tier row. */
+function scrollPokemonIntoView(pokemon: string, tierIdx: number) {
+    if (tierIdx < 0) return;
+    const tierEl = tierRowRefs.value.get(tierIdx);
+    if (!tierEl) return;
+    nextTick(() => {
+        const el = tierEl.querySelector(`[data-pokemon="${CSS.escape(pokemon)}"]`) as HTMLElement;
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+    });
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 </script>
 
 
@@ -673,6 +865,7 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
                         :neighbor="entry.prev"
                         :active="true"
                         :no-hover="fileexporter.exportInProgress"
+                        :class="getRerankClass(entry.pkmnName)"
                         @click.stop="
                             if (!$event.ctrlKey) {
                                 tierlist.activePkmn = entry.pkmnName;
@@ -688,8 +881,8 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
                             }
                         "
                     >
-                        <MetricPopout 
-                            v-if="global.popoutActive && tierlist.selectedPkmn.has(entry.pkmnName)"
+                        <MetricPopout
+                            v-if="global.popoutActive && tierlist.selectedPkmn.has(entry.pkmnName) && !isRerankHighlighting(entry.pkmnName)"
                             :pokemon="entry.pkmnName"
                             :open-to-top="i >= 7"
                         />
@@ -1280,5 +1473,33 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 }
 .category.pending .image {
     display: none;
+}
+
+/* --- Animate Re-Ranking --- */
+
+/* Phase 1: Fade out at OLD position */
+:deep(.rerank-fade-out) {
+    opacity: 0 !important;
+    transition: opacity 1s ease !important;
+}
+
+/* Phases 2–4 (collapse, open, fade-in) use inline styles set by JS
+   so the browser transitions from measured pixel values, not auto. */
+
+/* Phase 5: Highlight glow */
+:deep(.rerank-highlight) {
+    animation: rerank-glow 800ms ease !important;
+}
+
+@keyframes rerank-glow {
+    0% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+    }
+    30% {
+        filter: brightness(1.6) drop-shadow(0 0 14px rgba(255, 215, 0, 0.85));
+    }
+    100% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+    }
 }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import Window from '../components/Window.vue'
-import { useWorkspace } from '../store';
+import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
 import { parseTime, parseGameTime, parseDate, currentDate } from '../utils/time';
 import { getBaseSpeciesName, appendAlternativeMoveType } from '../utils/pokemon';
 
@@ -120,6 +120,7 @@ const editGametime = ref<string>("");
 const editLevel = ref<string>("");
 const editResets = ref<string>("");
 const editBlackouts = ref<string>("");
+const editPokemonSpecies = ref<string>("");
 
 // Calculate centered position for the window
 const centeredPosition = computed(() => {
@@ -145,14 +146,15 @@ function reset() {
     editLevel.value = "";
     editResets.value = "";
     editBlackouts.value = "";
+    editPokemonSpecies.value = "";
 }
 
-// Get the base Pokemon name from parsed CSV data
+// Get the base Pokemon name from the editable species field
 const basePokemonName = computed(() => {
-    if (parsedData.value.length === 0 || !parsedData.value[0].pokemon) {
+    if (!editPokemonSpecies.value) {
         return "";
     }
-    return getBaseSpeciesName(parsedData.value[0].pokemon);
+    return getBaseSpeciesName(editPokemonSpecies.value);
 });
 
 // Get available forms for the parsed Pokemon
@@ -170,7 +172,7 @@ const hasForms = computed(() => {
 const finalPokemonName = computed(() => {
     let name = "";
     if (!basePokemonName.value) {
-        name = parsedData.value[0]?.pokemon || "";
+        name = editPokemonSpecies.value || "";
     } else if (pokemonForm.value && hasForms.value) {
         // Special case for Paldean Tauros breeds
         if (basePokemonName.value === "Tauros" && (pokemonForm.value === "Combat Breed" || pokemonForm.value === "Blaze Breed" || pokemonForm.value === "Aqua Breed")) {
@@ -187,11 +189,11 @@ const finalPokemonName = computed(() => {
             }
         }
     } else {
-        // If CSV already has a form in the name, use it; otherwise use base name
-        const csvPokemon = parsedData.value[0]?.pokemon || "";
-        if (csvPokemon.includes('-') || csvPokemon.includes('(') || csvPokemon.includes('Alolan') || csvPokemon.includes('Galarian') || csvPokemon.includes('Hisuian') || csvPokemon.includes('Paldean')) {
-            // CSV already has form notation, use it
-            name = csvPokemon;
+        // If the species field already has a form in the name, use it; otherwise use base name
+        const speciesValue = editPokemonSpecies.value || "";
+        if (speciesValue.includes('-') || speciesValue.includes('(') || speciesValue.includes('Alolan') || speciesValue.includes('Galarian') || speciesValue.includes('Hisuian') || speciesValue.includes('Paldean')) {
+            // Already has form notation, use it
+            name = speciesValue;
         } else {
             name = basePokemonName.value;
         }
@@ -297,6 +299,7 @@ function parseCsvData(content: string) {
         errorMessage.value = "";
 
         // Populate editable fields from parsed data
+        editPokemonSpecies.value = row.pokemon || "";
         editRealtime.value = row.real_time_hmmss || "";
         editGametime.value = row.game_time || "";
         editLevel.value = row.level || "";
@@ -324,7 +327,7 @@ async function importMetrics() {
     try {
         // Validate required fields using editable values
         const missingFields = [];
-        if (!row.pokemon && !finalPokemonName.value) missingFields.push("pokemon");
+        if (!editPokemonSpecies.value && !finalPokemonName.value) missingFields.push("pokemon");
         if (!editRealtime.value) missingFields.push("real_time_hmmss");
         if (!editGametime.value) missingFields.push("game_time");
 
@@ -346,8 +349,7 @@ async function importMetrics() {
         const resets = parseInt(editResets.value) || -1;
         const blackouts = parseInt(editBlackouts.value) || -1;
 
-        // Insert the metric (alternative move type is already in the pokemon name)
-        workspace.insertActiveTierlistEntry(pokemon, {
+        const attempt = {
             releasedate: parseDate(runDate.value),
             finished: 1, // Assume all imported metrics are finished
             gametime: parseGameTime(gametime),
@@ -355,8 +357,19 @@ async function importMetrics() {
             level: level,
             resets: resets,
             blackouts: blackouts,
-        });
-        
+        };
+
+        // If animate reranking is enabled, buffer instead of applying immediately
+        const global = useGlobal();
+        const rerankStore = useReranking();
+        if (global.animateReranking && !rerankStore.isAnimating && !rerankStore.committing) {
+            rerankStore.addPendingInsertion(pokemon, attempt);
+            const toastStore = useToast();
+            toastStore.addToast(`Buffered ${pokemon} — press Ctrl+F1 to animate`, 'warning', { timeout: 4000 });
+        } else {
+            workspace.insertActiveTierlistEntry(pokemon, attempt);
+        }
+
         // Notify parent of the import (with the date for caching)
         emit('imported', runDate.value);
 
@@ -366,7 +379,9 @@ async function importMetrics() {
             return;
         }
 
-        errorMessage.value = `Successfully imported metrics for ${pokemon} (${runDate.value})`;
+        errorMessage.value = global.animateReranking
+            ? `Buffered ${pokemon} — press Ctrl+F1 to animate`
+            : `Successfully imported metrics for ${pokemon} (${runDate.value})`;
 
     } catch (error) {
         console.error("Error importing metrics:", row, error);
@@ -430,13 +445,11 @@ async function importMetrics() {
             
             <div v-if="parsedData.length > 0">
                 <h3>Final Row Data:</h3>
-                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">
-                    Pokemon: <strong style="color: #fff;">{{ finalPokemonName || parsedData[0].pokemon }}</strong>
-                    <span v-if="hasForms && pokemonForm" style="color: #666; font-size: 12px;">
-                        ({{ basePokemonName }})
-                    </span>
-                </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div style="grid-column: 1 / -1;">
+                        <label class="field-label">Pokemon{{ hasForms && pokemonForm ? ` (→ ${finalPokemonName})` : '' }}</label>
+                        <input class="field-input" v-model="editPokemonSpecies" placeholder="Pokemon name" />
+                    </div>
                     <div>
                         <label class="field-label">Real Time</label>
                         <input class="field-input" v-model="editRealtime" placeholder="H:MM:SS.xx" />

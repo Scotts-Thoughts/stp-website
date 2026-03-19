@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue';
 import Window from '../components/Window.vue'
 
 import { pokemonNames, getBaseSpeciesName, appendAlternativeMoveType } from '../utils/pokemon'
-import { useWorkspace } from '../store';
+import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
 import { currentDate, parseDate, parseTime } from '../utils/time';
 
 // Regional form prefixes
@@ -264,8 +264,7 @@ function insertMetric() {
     const finalName = finalPokemonName.value;
     console.log("Inserting metric", finalName, finished.value, gametime.value, realtime.value, level.value, resets.value, blackouts.value);
 
-    // Insert the metric (alternative move type is already in the pokemon name)
-    workspace.insertActiveTierlistEntry(finalName, {
+    const attempt = {
         releasedate: parseDate(releasedate.value),
         finished: finished.value ? 1 : 0,
         gametime: parseTime(gametime.value),
@@ -273,7 +272,18 @@ function insertMetric() {
         level: parseInt(level.value, 10),
         resets: parseInt(resets.value, 10),
         blackouts: parseInt(blackouts.value, 10),
-    });
+    };
+
+    // If animate reranking is enabled, buffer instead of applying immediately
+    const global = useGlobal();
+    const rerankStore = useReranking();
+    if (global.animateReranking && !rerankStore.isAnimating && !rerankStore.committing) {
+        rerankStore.addPendingInsertion(finalName, attempt);
+        const toastStore = useToast();
+        toastStore.addToast(`Buffered ${finalName} — press Ctrl+F1 to animate`, 'warning', { timeout: 4000 });
+    } else {
+        workspace.insertActiveTierlistEntry(finalName, attempt);
+    }
     reset();
 }
 

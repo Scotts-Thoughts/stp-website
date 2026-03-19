@@ -4,11 +4,14 @@ import { onKeyDown } from '@vueuse/core';
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import CameraAutomateWindow from './CameraAutomateWindow.vue';
-import { useContextMenu, useTierlist, useFileExporter, METRIC } from '../store';
+import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, RerankPhase, METRIC } from '../store';
 import { hasAlternativeMoveType } from '../utils/pokemon';
 
 const tierlist = useTierlist();
 const fileexporter = useFileExporter();
+const globalStore = useGlobal();
+const reranking = useReranking();
+const workspace = useWorkspace();
 
 // Tier colors (solid midpoint colors from the gradients)
 const TIER_COLORS = [
@@ -53,24 +56,28 @@ const tierData = computed(() => [
     { name: tierlist.activeTierlist.surgeTierLabel || "Surge", index: 7 },
 ]);
 
+// 90 hours in milliseconds — time-metric entries beyond this are shown as edge bubbles
+const EXTREME_OUTLIER_MS = 90 * 60 * 60 * 1000;
+
+type TimelineEntry = {
+    pkmnName: string;
+    value: number;
+    formattedValue: string;
+    tierIndex: number;
+    color: string;
+};
+
 // Build timeline entries from grouped entries (zoom-independent)
 const baseTimelineData = computed(() => {
     const metricKey = tierlist.activeMetric;
     const groups = tierlist.groupedEntries;
     const threshold = tierlist.activeThresholdList?.[tierlist.activeThresholdIndex]?.data;
-    if (!threshold) return { entries: [] as any[], fullMin: 0, fullMax: 1, threshold };
+    if (!threshold) return { entries: [] as TimelineEntry[], extremeOutliers: [] as TimelineEntry[], fullMin: 0, fullMax: 1, defaultMin: 0, defaultMax: 1, threshold };
 
     const formatter = METRIC[metricKey].formatValue ?? ((x: number) => x.toString());
+    const isTime = metricKey.includes('time');
 
-    type TimelineEntry = {
-        pkmnName: string;
-        value: number;
-        formattedValue: string;
-        tierIndex: number;
-        color: string;
-    };
-
-    const entries: TimelineEntry[] = [];
+    const allEntries: TimelineEntry[] = [];
 
     for (let tierIdx = 0; tierIdx < groups.length; tierIdx++) {
         if (tierIdx === 9) continue;
@@ -79,7 +86,7 @@ const baseTimelineData = computed(() => {
             let metric = entry.metrics[metricKey];
             if (typeof metric === "function") metric = metric();
             if (metric === undefined || metric < 0) continue;
-            entries.push({
+            allEntries.push({
                 pkmnName: entry.pkmnName,
                 value: metric as number,
                 formattedValue: formatter(metric as number),
@@ -89,20 +96,46 @@ const baseTimelineData = computed(() => {
         }
     }
 
-    if (entries.length === 0) return { entries: [], fullMin: 0, fullMax: 1, threshold };
+    // Separate extreme outliers (90h+ for time metrics) — shown as edge bubbles
+    const extremeOutliers: TimelineEntry[] = [];
+    const entries: TimelineEntry[] = [];
+    for (const e of allEntries) {
+        if (isTime && e.value >= EXTREME_OUTLIER_MS) {
+            extremeOutliers.push(e);
+        } else {
+            entries.push(e);
+        }
+    }
+
+    if (entries.length === 0) return { entries: [], extremeOutliers, fullMin: 0, fullMax: 1, defaultMin: 0, defaultMax: 1, threshold };
 
     entries.sort((a, b) => a.value - b.value);
 
     const minVal = entries[0].value;
     const maxVal = entries[entries.length - 1].value;
-    const range = maxVal - minVal || 1;
-    const fullMin = Math.max(0, minVal - range * 0.03);
-    const fullMax = maxVal + range * 0.03;
 
-    return { entries, fullMin, fullMax, threshold };
+    // Full range — the zoom/pan boundaries (actual data range, excluding 90h+ extremes)
+    const fullRange = maxVal - minVal || 1;
+    const fullMin = Math.max(0, minVal - fullRange * 0.03);
+    const fullMax = maxVal + fullRange * 0.03;
+
+    // Default view range — capped by thresholds so outliers don't compress the view on open
+    const maxThresh = Math.max(...threshold);
+    const minThresh = Math.min(...threshold);
+    const threshSpan = maxThresh - minThresh || 1;
+    const softCap = maxThresh + threshSpan * 0.5;
+    const softFloor = minThresh - threshSpan * 0.5;
+    const effectiveMax = maxVal > softCap ? softCap : maxVal;
+    const effectiveMin = minVal < softFloor ? softFloor : minVal;
+    const defRange = effectiveMax - effectiveMin || 1;
+    const defaultMin = Math.max(0, effectiveMin - defRange * 0.03);
+    const defaultMax = effectiveMax + defRange * 0.03;
+
+    return { entries, extremeOutliers, fullMin, fullMax, defaultMin, defaultMax, threshold };
 });
 
 // The visible range (respects zoom)
+// null = full range; initial view is set to the default (capped) range on mount
 const visibleRange = computed(() => {
     const { fullMin, fullMax } = baseTimelineData.value;
     return {
@@ -142,10 +175,10 @@ function computeSpriteSize(entries: { value: number }[], rangeMin: number, range
     return MIN_SPRITE_SIZE;
 }
 
-// Sprite size at full zoom — used for stable above/below assignment in baseLayout
+// Sprite size at default zoom — used for stable above/below assignment in baseLayout
 const fullZoomSpriteSize = computed(() => {
-    const { entries, fullMin, fullMax } = baseTimelineData.value;
-    return computeSpriteSize(entries, fullMin, fullMax);
+    const { entries, extremeOutliers, defaultMin, defaultMax } = baseTimelineData.value;
+    return computeSpriteSize([...entries, ...extremeOutliers], defaultMin, defaultMax);
 });
 
 // Target sprite size at current zoom level
@@ -255,21 +288,21 @@ const timelineView = computed(() => {
 // Collision avoidance constants (derived from dynamic sprite size)
 const GAP_FROM_AXIS = 40; // enough clearance for tick labels below/above axis
 
-// Run collision avoidance at full zoom to determine stable above/below assignments.
+// Run collision avoidance at default zoom to determine stable above/below assignments.
 // This only recomputes when the underlying data changes, NOT when zoom/pan changes.
 const baseLayout = computed(() => {
-    const { entries, fullMin, fullMax } = baseTimelineData.value;
-    if (entries.length === 0) return new Map<string, 'above' | 'below'>();
+    const { entries, extremeOutliers, defaultMin, defaultMax } = baseTimelineData.value;
+    if (entries.length === 0 && extremeOutliers.length === 0) return new Map<string, 'above' | 'below'>();
 
     const ss = fullZoomSpriteSize.value;
     const minXDist = ss + 4;
     const rowHeight = ss + 8;
-    const range = fullMax - fullMin || 1;
+    const range = defaultMax - defaultMin || 1;
 
-    // Compute X positions at full zoom
-    const withX = entries.map(entry => {
-        const xPct = ((entry.value - fullMin) / range) * 100;
-        const xPx = PADDING_LEFT + (xPct / 100) * TIMELINE_WIDTH;
+    // Compute X positions at default zoom; extreme outliers are clamped to right edge
+    const withX = [...entries, ...extremeOutliers].map(entry => {
+        const xPct = ((entry.value - defaultMin) / range) * 100;
+        const xPx = Math.min(PADDING_LEFT + TIMELINE_WIDTH, PADDING_LEFT + (xPct / 100) * TIMELINE_WIDTH);
         return { pkmnName: entry.pkmnName, xPx };
     });
 
@@ -342,9 +375,9 @@ const baseLayout = computed(() => {
 
 // Positioned entries within the visible range — uses stable above/below from baseLayout
 const positionedEntries = computed(() => {
-    const { entries } = baseTimelineData.value;
+    const { entries, extremeOutliers } = baseTimelineData.value;
     const { min, max } = visibleRange.value;
-    if (entries.length === 0) return [];
+    if (entries.length === 0 && extremeOutliers.length === 0) return [];
 
     const sideMap = baseLayout.value;
     const ss = spriteSize.value;
@@ -359,8 +392,18 @@ const positionedEntries = computed(() => {
         .map(entry => {
             const xPct = ((entry.value - min) / range) * 100;
             const xPx = PADDING_LEFT + (xPct / 100) * TIMELINE_WIDTH;
-            return { ...entry, xPx, yPx: 0, lineTop: 0, lineHeight: 0 };
+            return { ...entry, xPx, yPx: 0, lineTop: 0, lineHeight: 0, isExtremeOutlier: false };
         });
+
+    // Add extreme outliers clamped to the right edge (always visible)
+    for (const outlier of extremeOutliers) {
+        withX.push({
+            ...outlier,
+            xPx: PADDING_LEFT + TIMELINE_WIDTH,
+            yPx: 0, lineTop: 0, lineHeight: 0,
+            isExtremeOutlier: true,
+        });
+    }
 
     // Place entries using their stable side assignment, with collision avoidance within each side
     // Clamp to screen bounds
@@ -435,6 +478,10 @@ const positionedEntries = computed(() => {
 
     return withX;
 });
+
+// Split positioned entries for template rendering
+const regularEntries = computed(() => positionedEntries.value.filter(e => !e.isExtremeOutlier));
+const extremeEntries = computed(() => positionedEntries.value.filter(e => e.isExtremeOutlier));
 
 // --- Animation system for smooth zoom/pan ---
 let animTargetMin: number | null = null;
@@ -830,6 +877,147 @@ function stopPlayback() {
     countdown.value = 0;
 }
 
+// --- Timeline Re-Ranking Animation ---
+//
+// Timeline uses the same phase state machine as TierList, but the visual is different:
+//   FADE_OUT:     fade the sprite out at its OLD position (data not yet applied)
+//   COLLAPSE_GAP: apply data — record old X, compute new X, start sliding
+//   OPEN_SPACE:   (slide continues)
+//   FADE_IN:      fade the sprite in at its new X
+//   HIGHLIGHT:    glow
+//
+const rerankAnimOffset = ref<Map<string, number>>(new Map());
+const rerankFadeClass = ref<Map<string, string>>(new Map());
+let rerankAnimFrameId: number | null = null;
+let savedOldXPx = 0; // the entry's X before data was applied
+
+watch(() => reranking.phase, async (phase) => {
+    if (phase === RerankPhase.IDLE) {
+        rerankAnimOffset.value = new Map();
+        rerankFadeClass.value = new Map();
+        return;
+    }
+
+    const pokemon = reranking.animatingPokemon;
+    if (!pokemon) return;
+
+    // ── FADE_OUT: fade sprite at its OLD position ──
+    if (phase === RerankPhase.FADE_OUT) {
+        // Record the current X so we can slide from it later
+        const entry = positionedEntries.value.find(e => e.pkmnName === pokemon);
+        savedOldXPx = entry ? entry.xPx : 0;
+
+        // Fade out over 1s via CSS class
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-fade-out');
+        await new Promise(r => setTimeout(r, 1000));
+
+        reranking.setPhase(RerankPhase.COLLAPSE_GAP);
+        return;
+    }
+
+    // ── COLLAPSE_GAP: apply data, then slide from old X to new X ──
+    if (phase === RerankPhase.COLLAPSE_GAP) {
+        // Apply pending insertions now
+        const pending = [...reranking.pendingInsertions];
+        reranking.committing = true;
+        for (const ins of pending) {
+            workspace.insertActiveTierlistEntry(ins.pokemon, ins.attempt);
+        }
+        reranking.committing = false;
+        reranking.clearPending();
+
+        // Wait for Vue to re-render
+        await nextTick();
+        await nextTick();
+
+        // Find the new tier for the animating pokemon
+        for (let i = 0; i < tierlist.groupedEntries.length; i++) {
+            if (tierlist.groupedEntries[i].some(e => e.pkmnName === pokemon)) {
+                reranking.newTierIndex = i;
+                break;
+            }
+        }
+
+        // Find the entry's new X
+        const newEntry = positionedEntries.value.find(e => e.pkmnName === pokemon);
+        const newXPx = newEntry ? newEntry.xPx : savedOldXPx;
+
+        // Set offset so sprite visually stays at its old position
+        const offset = savedOldXPx - newXPx;
+        rerankAnimOffset.value.set(pokemon, offset);
+        // Make the sprite invisible while we position it
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-invisible');
+
+        // Ensure destination is in view — pan camera if needed
+        const { min, max } = visibleRange.value;
+        const range = max - min || 1;
+        if (newEntry) {
+            const pct = ((newEntry.value - min) / range);
+            if (pct < 0.05 || pct > 0.95) {
+                const halfRange = range / 2;
+                const { fullMin, fullMax } = baseTimelineData.value;
+                let nMin = newEntry.value - halfRange;
+                let nMax = newEntry.value + halfRange;
+                if (nMin < fullMin) { nMax += fullMin - nMin; nMin = fullMin; }
+                if (nMax > fullMax) { nMin -= nMax - fullMax; nMax = fullMax; }
+                animLerp = ANIM_LERP_PAN;
+                startAnimation(Math.max(fullMin, nMin), Math.min(fullMax, nMax));
+            }
+        }
+
+        // Animate the offset from (oldX - newX) → 0 over 1.5s
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-sliding');
+        const slideStart = performance.now();
+        const slideDuration = 1500;
+        const startOffset = offset;
+
+        function slideTick() {
+            const t = Math.min(1, (performance.now() - slideStart) / slideDuration);
+            const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+            rerankAnimOffset.value.set(pokemon, startOffset * (1 - ease));
+
+            if (t < 1) {
+                rerankAnimFrameId = requestAnimationFrame(slideTick);
+            } else {
+                rerankAnimOffset.value.set(pokemon, 0);
+                rerankAnimFrameId = null;
+                reranking.setPhase(RerankPhase.FADE_IN);
+            }
+        }
+        rerankAnimFrameId = requestAnimationFrame(slideTick);
+        return;
+    }
+
+    // Skip OPEN_SPACE in timeline — the slide handled it
+    if (phase === RerankPhase.OPEN_SPACE) {
+        return;
+    }
+
+    // ── FADE_IN: fade sprite in at its new position ──
+    if (phase === RerankPhase.FADE_IN) {
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-fade-in');
+        await new Promise(r => setTimeout(r, 600));
+        reranking.setPhase(RerankPhase.HIGHLIGHT);
+        return;
+    }
+
+    // ── HIGHLIGHT ──
+    if (phase === RerankPhase.HIGHLIGHT) {
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-highlight');
+        rerankAnimOffset.value.set(pokemon, 0);
+        await new Promise(r => setTimeout(r, 800));
+        reranking.finishAnimation();
+    }
+});
+
+function getRerankOffset(pkmnName: string): number {
+    return rerankAnimOffset.value.get(pkmnName) || 0;
+}
+
+function getTimelineRerankClass(pkmnName: string): string {
+    return rerankFadeClass.value.get(pkmnName) || '';
+}
+
 // --- Timeline-specific context menu ---
 const contextMenu = useContextMenu();
 
@@ -868,6 +1056,18 @@ function setupContextMenu() {
             label: '',  // separator
         },
         {
+            label: () => globalStore.animateReranking ? 'Animate Re-Ranking: ON' : 'Animate Re-Ranking: OFF',
+            action() {
+                globalStore.animateReranking = !globalStore.animateReranking;
+                if (!globalStore.animateReranking) {
+                    reranking.clearPending();
+                }
+            },
+        },
+        {
+            label: '',  // separator
+        },
+        {
             label: () => isPlaying.value ? 'Stop Playback' : 'Play',
             shortcut: 'P',
             action() {
@@ -888,6 +1088,15 @@ const emit = defineEmits<{
 }>();
 
 onMounted(() => {
+    // Set initial view to the threshold-capped default range if outliers would compress the view
+    const { fullMin, fullMax, defaultMin, defaultMax } = baseTimelineData.value;
+    const fullRange = fullMax - fullMin;
+    const defaultRange = defaultMax - defaultMin;
+    if (fullRange > 0 && defaultRange < fullRange * 0.95) {
+        viewMin.value = defaultMin;
+        viewMax.value = defaultMax;
+    }
+
     setupContextMenu();
     emit('activated');
 });
@@ -898,6 +1107,7 @@ watch(snapshots, setupContextMenu, { deep: true });
 onUnmounted(() => {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     if (spriteSizeFrameId) cancelAnimationFrame(spriteSizeFrameId);
+    if (rerankAnimFrameId) cancelAnimationFrame(rerankAnimFrameId);
     stopPlayback();
     emit('deactivated');
 });
@@ -937,9 +1147,9 @@ defineExpose({
             <div class="threshold-value-label" :style="{ color: t.color }">{{ t.label }}</div>
         </div>
 
-        <!-- Connector lines from sprites to axis -->
+        <!-- Connector lines from sprites to axis (regular entries only) -->
         <div
-            v-for="entry in positionedEntries"
+            v-for="entry in regularEntries"
             :key="'line-' + entry.pkmnName"
             class="connector-line"
             :style="{
@@ -951,9 +1161,9 @@ defineExpose({
             }"
         ></div>
 
-        <!-- Pokemon sprites -->
+        <!-- Pokemon sprites (regular entries) -->
         <PkmnImage
-            v-for="entry in positionedEntries"
+            v-for="entry in regularEntries"
             :key="entry.pkmnName"
             :pokemon="entry.pkmnName"
             :active="tierlist.selectedPkmn.has(entry.pkmnName)"
@@ -961,8 +1171,9 @@ defineExpose({
             :height="spriteSize"
             :outline="1"
             class="timeline-sprite"
+            :class="getTimelineRerankClass(entry.pkmnName)"
             :style="{
-                left: entry.xPx - spriteSize / 2 + 'px',
+                left: (entry.xPx - spriteSize / 2 + getRerankOffset(entry.pkmnName)) + 'px',
                 top: entry.yPx + 'px',
             }"
             @click.stop="
@@ -981,12 +1192,23 @@ defineExpose({
             "
         >
             <MetricPopout
-                v-if="tierlist.selectedPkmn.has(entry.pkmnName)"
+                v-if="tierlist.selectedPkmn.has(entry.pkmnName) && !(reranking.isAnimating && entry.pkmnName === reranking.animatingPokemon)"
                 :pokemon="entry.pkmnName"
                 :open-to-top="entry.popoutAbove"
                 :compact="true"
             />
         </PkmnImage>
+
+        <!-- Extreme outlier bubbles (collision-aware, at right edge) -->
+        <div
+            v-for="entry in extremeEntries"
+            :key="'outlier-' + entry.pkmnName"
+            class="outlier-bubble"
+            :style="{ top: entry.yPx + 'px' }"
+        >
+            <PkmnImage :pokemon="entry.pkmnName" :height="spriteSize" :outline="1" />
+            <span class="outlier-value" :style="{ color: entry.color }">{{ entry.formattedValue }}</span>
+        </div>
 
         <!-- X-axis line (colored by tier) -->
         <div class="axis-line-container" :style="{ top: AXIS_Y + 'px', left: '0px', width: '1920px' }">
@@ -1235,5 +1457,68 @@ defineExpose({
 @keyframes playing-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
+}
+
+/* Extreme outlier bubbles */
+.outlier-bubble {
+    position: absolute;
+    right: 20px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px 2px 2px;
+    background: rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+}
+
+.outlier-value {
+    font-family: 'Play', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Timeline re-ranking: fade out at old position */
+.timeline-rerank-fade-out {
+    opacity: 0 !important;
+    transition: opacity 1s ease !important;
+}
+
+/* Hidden while repositioning */
+.timeline-rerank-invisible {
+    opacity: 0 !important;
+}
+
+/* Visible during slide (sprite shown, offset animated via JS) */
+.timeline-rerank-sliding {
+    opacity: 0.7 !important;
+    z-index: 50 !important;
+}
+
+/* Fade in at new position */
+.timeline-rerank-fade-in {
+    opacity: 1 !important;
+    transition: opacity 600ms ease !important;
+    z-index: 50 !important;
+}
+
+/* Highlight glow */
+.timeline-rerank-highlight {
+    animation: timeline-rerank-glow 800ms ease !important;
+    z-index: 50 !important;
+}
+
+@keyframes timeline-rerank-glow {
+    0% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+    }
+    30% {
+        filter: brightness(1.6) drop-shadow(0 0 16px rgba(255, 215, 0, 0.9));
+    }
+    100% {
+        filter: brightness(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
 }
 </style>

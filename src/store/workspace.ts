@@ -296,6 +296,7 @@ export const useWorkspace = defineStore("workspace", () => {
         // calculate derived metrics
         attempt.faults = () => addMetrics(attempt.resets!, attempt.blackouts!);
         attempt.faults_0 = () => addMetrics(attempt.resets_0!, attempt.blackouts_0!);
+
         // insert the attempt
         if (!activeTierlist.value.entries[pokemon]) {
             activeTierlist.value.entries[pokemon] = {
