@@ -6,6 +6,7 @@ import MetricPopout from './MetricPopout.vue';
 import CameraAutomateWindow from './CameraAutomateWindow.vue';
 import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, RerankPhase, METRIC } from '../store';
 import { hasAlternativeMoveType } from '../utils/pokemon';
+import * as htmlToImage from 'html-to-image';
 
 const tierlist = useTierlist();
 const fileexporter = useFileExporter();
@@ -195,11 +196,18 @@ const targetSpriteSize = computed(() => {
 // Smoothly animated sprite size
 const spriteSize = ref(MAX_SPRITE_SIZE);
 let spriteSizeFrameId: number | null = null;
+let _inPlayback = false; // non-reactive flag: snap sprite size immediately during playback/recording
 
 watch(targetSpriteSize, (target) => {
     // Snap immediately on first computation (no animation on load)
     if (spriteSize.value === MAX_SPRITE_SIZE && target !== MAX_SPRITE_SIZE) {
         spriteSize.value = target;
+        return;
+    }
+    // During playback/recording, snap immediately to eliminate lag
+    if (_inPlayback) {
+        spriteSize.value = target;
+        if (spriteSizeFrameId) { cancelAnimationFrame(spriteSizeFrameId); spriteSizeFrameId = null; }
         return;
     }
     if (spriteSizeFrameId) return;
@@ -230,7 +238,7 @@ const timelineView = computed(() => {
     const metricKey = tierlist.activeMetric;
     const labelFormatter = METRIC[metricKey].formatLabel ?? ((x: number) => x.toString());
 
-    const thresholdPositions = [];
+    const thresholdPositions: { pct: number; value: number; label: string; tierIndex: number; color: string; tierName: string }[] = [];
     for (let i = 0; i < 8; i++) {
         const tVal = threshold[i];
         const pct = ((tVal - min) / range) * 100;
@@ -247,6 +255,31 @@ const timelineView = computed(() => {
     }
 
     const tickMarks = generateTickMarks(min, max, metricKey, labelFormatter);
+
+    // Collision avoidance between threshold labels and tick labels.
+    // Thresholds are the important labels — they only hide when they crowd EACH OTHER.
+    // Tick marks yield to thresholds: any tick too close to a threshold is filtered out.
+    const MIN_LABEL_DIST = 80; // minimum px between label centers
+    const threshXPositions = thresholdPositions.map(tp => PADDING_LEFT + (tp.pct / 100) * TIMELINE_WIDTH);
+
+    // Threshold labels: all hide together if any two thresholds are too close
+    let thresholdLabelsVisible = true;
+    for (let i = 0; i < threshXPositions.length && thresholdLabelsVisible; i++) {
+        for (let j = i + 1; j < threshXPositions.length; j++) {
+            if (Math.abs(threshXPositions[i] - threshXPositions[j]) < MIN_LABEL_DIST) {
+                thresholdLabelsVisible = false;
+                break;
+            }
+        }
+    }
+
+    // Filter out tick marks that collide with visible threshold labels
+    const filteredTickMarks = thresholdLabelsVisible
+        ? tickMarks.filter(t => {
+            const tx = PADDING_LEFT + (t.pct / 100) * TIMELINE_WIDTH;
+            return !threshXPositions.some(thx => Math.abs(tx - thx) < MIN_LABEL_DIST);
+        })
+        : tickMarks;
 
     // Build axis segments colored by tier
     // Thresholds divide the axis: values below threshold[0] = S, below threshold[1] = A, etc.
@@ -282,7 +315,7 @@ const timelineView = computed(() => {
         prevPct = pct;
     }
 
-    return { thresholdPositions, tickMarks, axisSegments };
+    return { thresholdPositions, thresholdLabelsVisible, tickMarks: filteredTickMarks, axisSegments };
 });
 
 // Collision avoidance constants (derived from dynamic sprite size)
@@ -726,8 +759,12 @@ export type CameraSnapshot = {
 };
 
 export type CameraSequenceStep = {
+    type: 'animate';
     startSnapshot: string;
     endSnapshot: string;
+    durationMs: number;
+} | {
+    type: 'wait';
     durationMs: number;
 };
 
@@ -739,6 +776,110 @@ const sequence = ref<CameraSequenceStep[]>([]);
 const isPlaying = ref(false);
 const countdown = ref(0); // 3, 2, 1, 0 (0 = no countdown)
 let playbackFrameId: number | null = null;
+const isRecording = ref(false);
+const recordingProgress = ref({ current: 0, total: 0, message: '' });
+let recordingCancelled = false;
+
+// --- Camera persistence ---
+const hasElectronVideo = !!window.electronVideo;
+const CAMERA_FILENAME = '_camera.json';
+
+function getCameraKey(): string {
+    return `${tierlist.activeTierlist?.name || 'default'}::${tierlist.activeMetric || 'default'}`;
+}
+
+async function saveCameraData() {
+    let allData: Record<string, { snapshots: CameraSnapshot[]; sequence: CameraSequenceStep[] }> = {};
+    try {
+        if (window.electronFS) {
+            try {
+                const raw = await window.electronFS.readFile(CAMERA_FILENAME);
+                allData = JSON.parse(raw);
+            } catch { /* file doesn't exist yet */ }
+        } else {
+            const raw = localStorage.getItem('stp-camera-data');
+            if (raw) allData = JSON.parse(raw);
+        }
+    } catch { /* ignore */ }
+
+    const key = getCameraKey();
+    allData[key] = {
+        snapshots: snapshots.value,
+        sequence: sequence.value,
+    };
+
+    try {
+        const json = JSON.stringify(allData, null, 2);
+        if (window.electronFS) {
+            await window.electronFS.writeFile(CAMERA_FILENAME, json);
+        } else {
+            localStorage.setItem('stp-camera-data', json);
+        }
+    } catch (e) {
+        console.warn('Failed to save camera data:', e);
+    }
+}
+
+async function loadCameraData() {
+    const key = getCameraKey();
+    try {
+        let raw: string | null = null;
+        if (window.electronFS) {
+            try {
+                raw = await window.electronFS.readFile(CAMERA_FILENAME);
+            } catch { /* file doesn't exist */ }
+        } else {
+            raw = localStorage.getItem('stp-camera-data');
+        }
+        if (!raw) return;
+        const allData = JSON.parse(raw);
+        const data = allData[key];
+        if (data) {
+            snapshots.value = data.snapshots || [];
+            sequence.value = (data.sequence || []).map((step: any) => {
+                // Migration: old steps without type field
+                if (!step.type) return { type: 'animate' as const, ...step };
+                return step;
+            });
+        }
+    } catch { /* no saved data */ }
+}
+
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+function debouncedSave() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => saveCameraData(), 500);
+}
+
+// --- Camera easing with C1 continuity (no derivative jumps at transitions) ---
+const EASE_CAP_MS = 1500;
+
+function cameraEase(t: number, durationMs: number): number {
+    const easeFrac = Math.min(0.5, EASE_CAP_MS / durationMs);
+
+    if (easeFrac >= 0.5) {
+        // Short animation: cubic ease-in-out
+        return t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // Long animation: ease-in, linear cruise, ease-out
+    // Cubic polynomials with matching position AND derivative at phase boundaries
+    // Derivative is 0 at endpoints and 1 (matching linear speed) at transitions
+    const ef = easeFrac;
+    if (t <= ef) {
+        // Ease-in: f(0)=0, f(ef)=ef, f'(0)=0, f'(ef)=1
+        return -t * t * t / (ef * ef) + 2 * t * t / ef;
+    } else if (t >= 1 - ef) {
+        // Ease-out: g(0)=1-ef, g(ef)=1, g'(0)=1, g'(ef)=0
+        const s = t - (1 - ef);
+        return -s * s * s / (ef * ef) + s * s / ef + s + 1 - ef;
+    } else {
+        // Linear cruise (speed = 1, continuous with ease-in/ease-out)
+        return t;
+    }
+}
 
 function takeSnapshot(name: string) {
     const { fullMin, fullMax } = baseTimelineData.value;
@@ -768,17 +909,19 @@ function goToSnapshot(snap: CameraSnapshot) {
 
 async function playSequence() {
     if (sequence.value.length === 0) return;
-    if (isPlaying.value) return;
+    if (isPlaying.value || isRecording.value) return;
 
     // Close the camera window
     cameraWindowActive.value = false;
 
-    // Jump to the first snapshot before countdown
+    // Jump to the first step's starting position before countdown
     const firstStep = sequence.value[0];
-    const firstSnap = snapshots.value.find(s => s.name === firstStep.startSnapshot);
-    if (firstSnap) {
-        goToSnapshot(firstSnap);
-        await new Promise(r => requestAnimationFrame(r));
+    if (firstStep.type === 'animate') {
+        const firstSnap = snapshots.value.find(s => s.name === firstStep.startSnapshot);
+        if (firstSnap) {
+            goToSnapshot(firstSnap);
+            await new Promise(r => requestAnimationFrame(r));
+        }
     }
 
     // Countdown 3, 2, 1
@@ -788,11 +931,21 @@ async function playSequence() {
     }
     countdown.value = 0;
     isPlaying.value = true;
+    _inPlayback = true;
 
     // Pause after countdown so the viewer can take in the starting position
     await new Promise(r => setTimeout(r, 1000));
 
     for (const step of sequence.value) {
+        if (!isPlaying.value) break; // cancelled
+
+        if (step.type === 'wait') {
+            // Hold current viewport for the duration
+            await new Promise(r => setTimeout(r, step.durationMs));
+            continue;
+        }
+
+        // Animate step
         const startSnap = snapshots.value.find(s => s.name === step.startSnapshot);
         const endSnap = snapshots.value.find(s => s.name === step.endSnapshot);
         if (!startSnap || !endSnap) continue;
@@ -810,50 +963,17 @@ async function playSequence() {
 
         await new Promise<void>((resolve) => {
             const startTime = performance.now();
-            // Ease duration is capped so long animations have a linear cruise in the middle
-            const EASE_CAP_MS = 1500; // max ms spent easing in or out
-            const easeFrac = Math.min(0.5, EASE_CAP_MS / step.durationMs);
-
-            function cameraEase(t: number): number {
-                // Three phases: ease-in, linear cruise, ease-out
-                // easeFrac of the duration at each end, (1 - 2*easeFrac) linear in the middle
-                if (easeFrac >= 0.5) {
-                    // Short animation: standard cubic ease-in-out
-                    return t < 0.5
-                        ? 4 * t * t * t
-                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
-                }
-                const linearFrac = 1 - 2 * easeFrac;
-                // Ease-in covers [0, easeFrac] -> output [0, easeFrac]
-                // Linear covers [easeFrac, 1-easeFrac] -> output [easeFrac, 1-easeFrac]
-                // Ease-out covers [1-easeFrac, 1] -> output [1-easeFrac, 1]
-                // Normalized so the overall mapping is 0->0, 1->1
-                if (t <= easeFrac) {
-                    // Ease-in: smooth start (quadratic)
-                    const nt = t / easeFrac; // 0..1
-                    return easeFrac * (nt * nt);
-                } else if (t >= 1 - easeFrac) {
-                    // Ease-out: smooth end (quadratic)
-                    const nt = (t - (1 - easeFrac)) / easeFrac; // 0..1
-                    return 1 - easeFrac * ((1 - nt) * (1 - nt));
-                } else {
-                    // Linear cruise in the middle
-                    const nt = (t - easeFrac) / linearFrac; // 0..1
-                    return easeFrac + linearFrac * nt;
-                }
-            }
 
             function tick() {
+                if (!isPlaying.value) { playbackFrameId = null; resolve(); return; }
                 const elapsed = performance.now() - startTime;
                 const t = Math.min(1, elapsed / step.durationMs);
-                const ease = cameraEase(t);
+                const ease = cameraEase(t, step.durationMs);
 
                 const curMin = sMin + (eMin - sMin) * ease;
                 const curMax = sMax + (eMax - sMax) * ease;
 
-                // Always use explicit values during animation; only snap to null at the very end
                 if (t >= 1) {
-                    // Final frame: snap to exact end state
                     const fullRange = fullMax - fullMin;
                     if (Math.abs((eMax - eMin) - fullRange) < fullRange * 0.01) {
                         viewMin.value = null;
@@ -874,6 +994,7 @@ async function playSequence() {
         });
     }
 
+    _inPlayback = false;
     isPlaying.value = false;
 }
 
@@ -882,8 +1003,172 @@ function stopPlayback() {
         cancelAnimationFrame(playbackFrameId);
         playbackFrameId = null;
     }
+    _inPlayback = false;
     isPlaying.value = false;
     countdown.value = 0;
+    if (isRecording.value) {
+        recordingCancelled = true;
+    }
+}
+
+// --- Camera Sequence Recording (export as .mov) ---
+
+async function recordSequence() {
+    if (sequence.value.length === 0) return;
+    if (isRecording.value || isPlaying.value) return;
+
+    const video = window.electronVideo;
+    if (!video) return;
+
+    const outputPath = await video.saveFileDialog('camera-sequence.mov');
+    if (!outputPath) return;
+
+    cameraWindowActive.value = false;
+    isRecording.value = true;
+    recordingCancelled = false;
+    _inPlayback = true;
+
+    const FPS = 60;
+    const tmpDir = await video.createTempDir();
+
+    // Pre-build font CSS for html-to-image
+    let fontEmbedCSS = '';
+    try {
+        const base = import.meta.env.BASE_URL || '/';
+        const fontFiles = [
+            { family: 'Teko', url: `${base}fonts/Teko-Bold.ttf` },
+            { family: 'play', url: `${base}fonts/Play-Bold.ttf` },
+            { family: 'oseb', url: `${base}fonts/OpenSans-ExtraBold.ttf` },
+            { family: 'osb', url: `${base}fonts/Play-Bold.ttf` },
+            { family: 'titan', url: `${base}fonts/TitanOne-Regular.ttf` },
+        ];
+        const promises = fontFiles.map(async ({ family, url }) => {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+            return `@font-face { font-family: '${family}'; src: url(${dataUrl}) format('truetype'); }`;
+        });
+        fontEmbedCSS = (await Promise.all(promises)).join('\n');
+    } catch { /* fallback */ }
+
+    const captureOpts = {
+        backgroundColor: 'transparent' as string,
+        cacheBust: false,
+        pixelRatio: 1,
+        skipFonts: true,
+        ...(fontEmbedCSS ? { fontEmbedCSS } : { skipFonts: false, preferredFontFormat: 'truetype' as const }),
+    };
+
+    // Compute total duration and build step timeline
+    const stepTimeline: Array<{ startMs: number; endMs: number; step: CameraSequenceStep }> = [];
+    let cumulativeMs = 0;
+    for (const step of sequence.value) {
+        stepTimeline.push({ startMs: cumulativeMs, endMs: cumulativeMs + step.durationMs, step });
+        cumulativeMs += step.durationMs;
+    }
+    const totalDurationMs = cumulativeMs;
+    const totalFrames = Math.ceil(totalDurationMs / 1000 * FPS);
+
+    const { fullMin, fullMax } = baseTimelineData.value;
+
+    // Compute viewport at a given time in the sequence
+    function getViewportAtTime(timeMs: number): { vMin: number; vMax: number } {
+        let currentMin = fullMin;
+        let currentMax = fullMax;
+
+        // Set initial position from first animate step's start snapshot
+        for (const { step } of stepTimeline) {
+            if (step.type === 'animate') {
+                const snap = snapshots.value.find(s => s.name === step.startSnapshot);
+                if (snap) { currentMin = snap.viewMin ?? fullMin; currentMax = snap.viewMax ?? fullMax; }
+                break;
+            }
+        }
+
+        for (const { startMs, endMs, step } of stepTimeline) {
+            if (timeMs < startMs) break;
+
+            if (step.type === 'wait') {
+                if (timeMs <= endMs) return { vMin: currentMin, vMax: currentMax };
+                continue;
+            }
+
+            const startSnap = snapshots.value.find(s => s.name === step.startSnapshot);
+            const endSnap = snapshots.value.find(s => s.name === step.endSnapshot);
+            if (!startSnap || !endSnap) continue;
+
+            const sMin = startSnap.viewMin ?? fullMin;
+            const sMax = startSnap.viewMax ?? fullMax;
+            const eMin = endSnap.viewMin ?? fullMin;
+            const eMax = endSnap.viewMax ?? fullMax;
+
+            if (timeMs <= endMs) {
+                const t = Math.min(1, (timeMs - startMs) / step.durationMs);
+                const ease = cameraEase(t, step.durationMs);
+                return { vMin: sMin + (eMin - sMin) * ease, vMax: sMax + (eMax - sMax) * ease };
+            }
+
+            currentMin = eMin;
+            currentMax = eMax;
+        }
+
+        return { vMin: currentMin, vMax: currentMax };
+    }
+
+    try {
+        const el = containerRef.value;
+        if (!el) throw new Error('Container not found');
+
+        for (let frame = 0; frame <= totalFrames; frame++) {
+            if (recordingCancelled) break;
+
+            const timeMs = (frame / FPS) * 1000;
+            const { vMin, vMax } = getViewportAtTime(timeMs);
+
+            recordingProgress.value = { current: frame, total: totalFrames, message: `Capturing frame ${frame}/${totalFrames}` };
+
+            const fullRange = fullMax - fullMin;
+            if (Math.abs((vMax - vMin) - fullRange) < fullRange * 0.01) {
+                viewMin.value = null;
+                viewMax.value = null;
+            } else {
+                viewMin.value = vMin;
+                viewMax.value = vMax;
+            }
+
+            await nextTick();
+            await nextTick();
+            await new Promise(r => requestAnimationFrame(r));
+
+            const dataUrl = await htmlToImage.toPng(el, captureOpts);
+            await video.saveFrame(tmpDir, frame, dataUrl);
+        }
+
+        if (!recordingCancelled) {
+            recordingProgress.value = { current: totalFrames, total: totalFrames, message: 'Encoding video with FFmpeg...' };
+            const result = await video.encode(tmpDir, outputPath, FPS);
+            if (!result.success) {
+                recordingProgress.value = { current: 0, total: 0, message: `FFmpeg error: ${result.error}` };
+                await video.cleanup(tmpDir);
+                _inPlayback = false;
+                isRecording.value = false;
+                return;
+            }
+            recordingProgress.value = { current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` };
+        }
+
+        await video.cleanup(tmpDir);
+    } catch (e) {
+        recordingProgress.value = { current: 0, total: 0, message: `Error: ${String(e)}` };
+        try { await video.cleanup(tmpDir); } catch { /* ignore */ }
+    }
+
+    _inPlayback = false;
+    isRecording.value = false;
 }
 
 // --- Timeline Re-Ranking Animation ---
@@ -1083,6 +1368,10 @@ function setupContextMenu() {
                 }
             },
         },
+        ...(hasElectronVideo ? [{
+            label: 'Export Sequence as .mov',
+            action() { recordSequence(); },
+        }] : []),
     ]);
 }
 
@@ -1092,7 +1381,7 @@ const emit = defineEmits<{
     close: [],
 }>();
 
-onMounted(() => {
+onMounted(async () => {
     // Set initial view to the threshold-capped default range if outliers would compress the view
     const { fullMin, fullMax, defaultMin, defaultMax } = baseTimelineData.value;
     const fullRange = fullMax - fullMin;
@@ -1102,22 +1391,31 @@ onMounted(() => {
         viewMax.value = defaultMax;
     }
 
+    // Load saved camera presets (snapshots + sequence)
+    await loadCameraData();
+
     setupContextMenu();
     emit('activated');
 });
 
-// Rebuild context menu when snapshots change so "Go to" entries stay current
-watch(snapshots, setupContextMenu, { deep: true });
+// Auto-save camera data when snapshots or sequence change
+watch(snapshots, () => { debouncedSave(); setupContextMenu(); }, { deep: true });
+watch(sequence, debouncedSave, { deep: true });
 
 onUnmounted(() => {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     if (spriteSizeFrameId) cancelAnimationFrame(spriteSizeFrameId);
     if (rerankAnimFrameId) cancelAnimationFrame(rerankAnimFrameId);
+    if (saveTimeout) clearTimeout(saveTimeout);
     stopPlayback();
     emit('deactivated');
 });
 
 onKeyDown('Escape', () => {
+    if (isRecording.value) {
+        recordingCancelled = true;
+        return;
+    }
     if (isPlaying.value || countdown.value > 0) {
         stopPlayback();
     }
@@ -1149,7 +1447,7 @@ defineExpose({
         >
             <div class="threshold-tick" :style="{ background: t.color }"></div>
             <div class="threshold-tier-label" :style="{ color: t.color }">{{ t.tierName }}</div>
-            <div class="threshold-value-label" :style="{ color: t.color }">{{ t.label }}</div>
+            <div class="threshold-value-label" :class="{ hidden: !timelineView.thresholdLabelsVisible }" :style="{ color: t.color }">{{ t.label }}</div>
         </div>
 
         <!-- Connector lines from sprites to axis (regular entries only) -->
@@ -1255,6 +1553,19 @@ defineExpose({
             <div class="playing-dot"></div>
             Playing
         </div>
+
+        <!-- Recording overlay -->
+        <div v-if="isRecording" class="recording-overlay">
+            <div class="recording-header">
+                <div class="recording-dot"></div>
+                Recording
+            </div>
+            <div class="recording-message">{{ recordingProgress.message }}</div>
+            <div v-if="recordingProgress.total > 0" class="recording-bar-container">
+                <div class="recording-bar" :style="{ width: (recordingProgress.current / recordingProgress.total * 100) + '%' }"></div>
+            </div>
+            <div class="recording-hint">Press Escape to cancel</div>
+        </div>
     </div>
 
     <Teleport to="#app">
@@ -1262,12 +1573,14 @@ defineExpose({
             :visible="cameraWindowActive"
             :snapshots="snapshots"
             :sequence="sequence"
+            :has-electron-video="hasElectronVideo"
             @close="cameraWindowActive = false"
             @take-snapshot="takeSnapshot"
             @remove-snapshot="removeSnapshot"
             @go-to-snapshot="goToSnapshot"
             @update-sequence="(s) => sequence = s"
             @play="playSequence"
+            @export="recordSequence"
         />
     </Teleport>
 </template>
@@ -1335,6 +1648,10 @@ defineExpose({
     white-space: nowrap;
     opacity: 0.6;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    transition: opacity 0.3s ease;
+}
+.threshold-value-label.hidden {
+    opacity: 0;
 }
 
 /* Connector lines */
@@ -1506,5 +1823,68 @@ defineExpose({
     100% {
         filter: brightness(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
     }
+}
+
+/* Recording overlay */
+.recording-overlay {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 32px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(255, 80, 80, 0.5);
+    border-radius: 12px;
+    pointer-events: none;
+}
+
+.recording-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Play', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: rgba(255, 80, 80, 0.95);
+}
+
+.recording-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ff4444;
+    animation: playing-pulse 1.2s ease-in-out infinite;
+}
+
+.recording-message {
+    font-family: 'Play', sans-serif;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.recording-bar-container {
+    width: 240px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.recording-bar {
+    height: 100%;
+    background: #ff4444;
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
+.recording-hint {
+    font-family: 'Play', sans-serif;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.35);
 }
 </style>
