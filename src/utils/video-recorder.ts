@@ -41,12 +41,13 @@ export async function recordRerankingAnimation(opts: {
     // Pre-build font CSS for html-to-image
     let fontEmbedCSS = '';
     try {
+        const base = import.meta.env.BASE_URL || '/';
         const fontFiles = [
-            { family: 'Teko', url: '/fonts/Teko-Bold.ttf' },
-            { family: 'play', url: '/fonts/Play-Bold.ttf' },
-            { family: 'oseb', url: '/fonts/OpenSans-ExtraBold.ttf' },
-            { family: 'osb', url: '/fonts/Play-Bold.ttf' },
-            { family: 'titan', url: '/fonts/TitanOne-Regular.ttf' },
+            { family: 'Teko', url: `${base}fonts/Teko-Bold.ttf` },
+            { family: 'play', url: `${base}fonts/Play-Bold.ttf` },
+            { family: 'oseb', url: `${base}fonts/OpenSans-ExtraBold.ttf` },
+            { family: 'osb', url: `${base}fonts/Play-Bold.ttf` },
+            { family: 'titan', url: `${base}fonts/TitanOne-Regular.ttf` },
         ];
         const promises = fontFiles.map(async ({ family, url }) => {
             const resp = await fetch(url);
@@ -75,7 +76,7 @@ export async function recordRerankingAnimation(opts: {
     const OPEN_END      = 3.0;
     const FADE_IN_END   = 3.6;
     const HIGHLIGHT_END = 4.4;
-    const GLOW_START    = FADE_IN_END - 0.3 * (FADE_IN_END - OPEN_END); // 70% into fade-in
+
 
     const totalFrames = Math.ceil(HIGHLIGHT_END * FPS);
     let frameIndex = 0;

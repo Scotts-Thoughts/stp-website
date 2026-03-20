@@ -293,18 +293,8 @@ export const useFileExporter = defineStore("file-exporter", () => {
                     htmlEl.style.fontVariant = computedStyle.fontVariant;
                     htmlEl.style.letterSpacing = computedStyle.letterSpacing;
                     htmlEl.style.textRendering = computedStyle.textRendering;
-                    htmlEl.style.lineHeight = computedStyle.lineHeight;
-                });
-
-                // Fix tier label vertical centering for export
-                // html-to-image doesn't preserve the line-height-based positioning,
-                // so apply explicit flexbox centering to tier label elements in the clone
-                const tierLabels = exportWrapper.querySelectorAll('.category .label');
-                tierLabels.forEach((el) => {
-                    const htmlEl = el as HTMLElement;
-                    htmlEl.style.display = 'flex';
-                    htmlEl.style.alignItems = 'center';
-                    htmlEl.style.justifyContent = 'center';
+                    // lineHeight intentionally NOT copied — converting relative values
+                    // (1.05em, 1, normal) to absolute pixels shifts text vertically
                 });
                 
                 // Wait for layout to settle after style changes
@@ -315,12 +305,13 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 // Build font CSS with embedded base64 fonts for reliable export
                 let fontEmbedCSS = '';
                 try {
+                    const base = import.meta.env.BASE_URL || '/';
                     const fontFiles = [
-                        { family: 'Teko', url: '/fonts/Teko-Bold.ttf' },
-                        { family: 'play', url: '/fonts/Play-Bold.ttf' },
-                        { family: 'oseb', url: '/fonts/OpenSans-ExtraBold.ttf' },
-                        { family: 'osb', url: '/fonts/Play-Bold.ttf' },
-                        { family: 'titan', url: '/fonts/TitanOne-Regular.ttf' },
+                        { family: 'Teko', url: `${base}fonts/Teko-Bold.ttf` },
+                        { family: 'play', url: `${base}fonts/Play-Bold.ttf` },
+                        { family: 'oseb', url: `${base}fonts/OpenSans-ExtraBold.ttf` },
+                        { family: 'osb', url: `${base}fonts/Play-Bold.ttf` },
+                        { family: 'titan', url: `${base}fonts/TitanOne-Regular.ttf` },
                     ];
                     const fontPromises = fontFiles.map(async ({ family, url }) => {
                         const response = await fetch(url);
