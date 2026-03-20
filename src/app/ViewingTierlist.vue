@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, useTemplateRef, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { ref, watch, useTemplateRef, onMounted, onUnmounted, nextTick, type ComponentPublicInstance } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 
-import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking } from '../store';
+import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion } from '../store';
 import { currentDate } from '../utils/time';
 import { recordRerankingAnimation } from '../utils/video-recorder';
 
@@ -437,24 +437,53 @@ async function exportRerankingVideo() {
     if (!success) return;
 }
 
-// Ctrl+F1: Start the re-ranking animation (data is NOT applied yet — that happens mid-animation)
-onKeyDown('F1', (e) => {
+// Last animation data for replay
+let lastReplay: { insertions: PendingInsertion[]; pokemon: string } | null = null;
+
+// Ctrl+F1: Start the re-ranking animation, or replay the last one
+onKeyDown('F1', async (e) => {
     if (!e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
+    if (!global.animateReranking) return;
+    if (reranking.isAnimating) return;
 
-    if (!global.animateReranking || !reranking.hasPending) {
-        if (global.animateReranking) {
+    // If no pending insertions, try replaying the last animation
+    if (!reranking.hasPending) {
+        if (!lastReplay) {
             toast.addToast('No pending re-ranking to apply', 'warning', { timeout: 2000 });
+            return;
         }
-        return;
-    }
 
-    if (reranking.isAnimating) return; // already running
+        // Undo: remove the last attempt(s) that were inserted
+        for (const ins of lastReplay.insertions) {
+            const entry = workspace.activeTierlist.entries[ins.pokemon];
+            if (entry) {
+                entry.attempts.pop();
+                if (entry.attempts.length === 0) {
+                    delete workspace.activeTierlist.entries[ins.pokemon];
+                }
+            }
+        }
+
+        // Wait for Vue to re-render so the Pokemon is back at its old position
+        await nextTick();
+        await nextTick();
+
+        // Re-queue them as pending
+        for (const ins of lastReplay.insertions) {
+            reranking.addPendingInsertion(ins.pokemon, ins.attempt);
+        }
+
+        toast.addToast('Replaying last re-ranking...', 'info', { timeout: 1500 });
+    }
 
     // Figure out which pokemon we're animating (last pending insertion)
     const pending = [...reranking.pendingInsertions];
     const lastInsertion = pending[pending.length - 1];
     const animPokemon = lastInsertion.pokemon;
+
+    // Save for replay
+    lastReplay = { insertions: pending, pokemon: animPokemon };
 
     // Find the old position (if the pokemon already exists in the tierlist)
     let oldTier = -1;
@@ -484,7 +513,7 @@ onKeyDown('F1', (e) => {
         @drop="onDrop"
     >
         <TimelineView v-if="timelineActive" ref="timelineRef" @close="timelineActive = false" />
-        <Tierlist v-else />
+        <Tierlist v-else @restore-context-menu="setupMainContextMenu" />
         <!-- Drop overlay -->
         <div v-if="isDraggingOver" class="drop-overlay">
             <div class="drop-overlay-content">

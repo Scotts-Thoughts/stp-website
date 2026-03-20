@@ -50,6 +50,9 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
     "extraResources": [
       {
         "from": "bundled-workspace",

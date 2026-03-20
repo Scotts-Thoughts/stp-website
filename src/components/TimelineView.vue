@@ -373,13 +373,21 @@ const baseLayout = computed(() => {
     return sideMap;
 });
 
+// During re-ranking, pin the animating Pokemon to its original side of the axis
+const rerankSideOverride = ref<Map<string, 'above' | 'below'>>(new Map());
+
 // Positioned entries within the visible range — uses stable above/below from baseLayout
 const positionedEntries = computed(() => {
     const { entries, extremeOutliers } = baseTimelineData.value;
     const { min, max } = visibleRange.value;
     if (entries.length === 0 && extremeOutliers.length === 0) return [];
 
-    const sideMap = baseLayout.value;
+    const baseSideMap = baseLayout.value;
+    const overrides = rerankSideOverride.value;
+    // Merge: overrides take precedence over base layout
+    const sideMap = overrides.size > 0
+        ? new Map([...baseSideMap, ...overrides])
+        : baseSideMap;
     const ss = spriteSize.value;
     const minXDist = ss + 4;
     const rowHeight = ss + 8;
@@ -881,43 +889,40 @@ function stopPlayback() {
 // --- Timeline Re-Ranking Animation ---
 //
 // Timeline uses the same phase state machine as TierList, but the visual is different:
-//   FADE_OUT:     fade the sprite out at its OLD position (data not yet applied)
-//   COLLAPSE_GAP: apply data — record old X, compute new X, start sliding
-//   OPEN_SPACE:   (slide continues)
-//   FADE_IN:      fade the sprite in at its new X
+//   FADE_OUT:     record old position, apply data immediately, start sliding
+//   COLLAPSE_GAP: (slide continues — handled in FADE_OUT)
+//   OPEN_SPACE:   (skipped)
+//   FADE_IN:      (skipped — sprite stays visible throughout)
 //   HIGHLIGHT:    glow
 //
-const rerankAnimOffset = ref<Map<string, number>>(new Map());
+const rerankAnimOffsetX = ref<Map<string, number>>(new Map());
+const rerankAnimOffsetY = ref<Map<string, number>>(new Map());
 const rerankFadeClass = ref<Map<string, string>>(new Map());
 let rerankAnimFrameId: number | null = null;
-let savedOldXPx = 0; // the entry's X before data was applied
 
 watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.IDLE) {
-        rerankAnimOffset.value = new Map();
+        rerankAnimOffsetX.value = new Map();
+        rerankAnimOffsetY.value = new Map();
         rerankFadeClass.value = new Map();
+        rerankSideOverride.value = new Map();
         return;
     }
 
     const pokemon = reranking.animatingPokemon;
     if (!pokemon) return;
 
-    // ── FADE_OUT: fade sprite at its OLD position ──
+    // ── FADE_OUT: record old position, apply data, slide to new position ──
     if (phase === RerankPhase.FADE_OUT) {
-        // Record the current X so we can slide from it later
-        const entry = positionedEntries.value.find(e => e.pkmnName === pokemon);
-        savedOldXPx = entry ? entry.xPx : 0;
+        // Record old position and side before data changes
+        const oldEntry = positionedEntries.value.find(e => e.pkmnName === pokemon);
+        const savedOldXPx = oldEntry ? oldEntry.xPx : 0;
+        const savedOldYPx = oldEntry ? oldEntry.yPx : 0;
 
-        // Fade out over 1s via CSS class
-        rerankFadeClass.value.set(pokemon, 'timeline-rerank-fade-out');
-        await new Promise(r => setTimeout(r, 1000));
+        // Pin this Pokemon to its current side of the axis so it doesn't jump
+        const oldSide = baseLayout.value.get(pokemon) ?? 'above';
+        rerankSideOverride.value = new Map([[pokemon, oldSide]]);
 
-        reranking.setPhase(RerankPhase.COLLAPSE_GAP);
-        return;
-    }
-
-    // ── COLLAPSE_GAP: apply data, then slide from old X to new X ──
-    if (phase === RerankPhase.COLLAPSE_GAP) {
         // Apply pending insertions now
         const pending = [...reranking.pendingInsertions];
         reranking.committing = true;
@@ -939,15 +944,17 @@ watch(() => reranking.phase, async (phase) => {
             }
         }
 
-        // Find the entry's new X
+        // Find the entry's new position
         const newEntry = positionedEntries.value.find(e => e.pkmnName === pokemon);
         const newXPx = newEntry ? newEntry.xPx : savedOldXPx;
+        const newYPx = newEntry ? newEntry.yPx : savedOldYPx;
 
-        // Set offset so sprite visually stays at its old position
-        const offset = savedOldXPx - newXPx;
-        rerankAnimOffset.value.set(pokemon, offset);
-        // Make the sprite invisible while we position it
-        rerankFadeClass.value.set(pokemon, 'timeline-rerank-invisible');
+        // Set offsets so sprite visually stays at its old position
+        const offsetX = savedOldXPx - newXPx;
+        const offsetY = savedOldYPx - newYPx;
+        rerankAnimOffsetX.value.set(pokemon, offsetX);
+        rerankAnimOffsetY.value.set(pokemon, offsetY);
+        rerankFadeClass.value.set(pokemon, 'timeline-rerank-sliding');
 
         // Ensure destination is in view — pan camera if needed
         const { min, max } = visibleRange.value;
@@ -966,53 +973,50 @@ watch(() => reranking.phase, async (phase) => {
             }
         }
 
-        // Animate the offset from (oldX - newX) → 0 over 1.5s
-        rerankFadeClass.value.set(pokemon, 'timeline-rerank-sliding');
+        // Animate both offsets from (old - new) → 0 over 1.5s
         const slideStart = performance.now();
         const slideDuration = 1500;
-        const startOffset = offset;
 
         function slideTick() {
             const t = Math.min(1, (performance.now() - slideStart) / slideDuration);
             const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
-            rerankAnimOffset.value.set(pokemon, startOffset * (1 - ease));
+            rerankAnimOffsetX.value.set(pokemon, offsetX * (1 - ease));
+            rerankAnimOffsetY.value.set(pokemon, offsetY * (1 - ease));
 
             if (t < 1) {
                 rerankAnimFrameId = requestAnimationFrame(slideTick);
             } else {
-                rerankAnimOffset.value.set(pokemon, 0);
+                rerankAnimOffsetX.value.set(pokemon, 0);
+                rerankAnimOffsetY.value.set(pokemon, 0);
                 rerankAnimFrameId = null;
-                reranking.setPhase(RerankPhase.FADE_IN);
+                reranking.setPhase(RerankPhase.HIGHLIGHT);
             }
         }
         rerankAnimFrameId = requestAnimationFrame(slideTick);
         return;
     }
 
-    // Skip OPEN_SPACE in timeline — the slide handled it
-    if (phase === RerankPhase.OPEN_SPACE) {
-        return;
-    }
-
-    // ── FADE_IN: fade sprite in at its new position ──
-    if (phase === RerankPhase.FADE_IN) {
-        rerankFadeClass.value.set(pokemon, 'timeline-rerank-fade-in');
-        await new Promise(r => setTimeout(r, 600));
-        reranking.setPhase(RerankPhase.HIGHLIGHT);
+    // Skip COLLAPSE_GAP, OPEN_SPACE, FADE_IN — slide handled everything
+    if (phase === RerankPhase.COLLAPSE_GAP || phase === RerankPhase.OPEN_SPACE || phase === RerankPhase.FADE_IN) {
         return;
     }
 
     // ── HIGHLIGHT ──
     if (phase === RerankPhase.HIGHLIGHT) {
         rerankFadeClass.value.set(pokemon, 'timeline-rerank-highlight');
-        rerankAnimOffset.value.set(pokemon, 0);
+        rerankAnimOffsetX.value.set(pokemon, 0);
+        rerankAnimOffsetY.value.set(pokemon, 0);
         await new Promise(r => setTimeout(r, 800));
         reranking.finishAnimation();
     }
 });
 
-function getRerankOffset(pkmnName: string): number {
-    return rerankAnimOffset.value.get(pkmnName) || 0;
+function getRerankOffsetX(pkmnName: string): number {
+    return rerankAnimOffsetX.value.get(pkmnName) || 0;
+}
+
+function getRerankOffsetY(pkmnName: string): number {
+    return rerankAnimOffsetY.value.get(pkmnName) || 0;
 }
 
 function getTimelineRerankClass(pkmnName: string): string {
@@ -1174,8 +1178,8 @@ defineExpose({
             class="timeline-sprite"
             :class="getTimelineRerankClass(entry.pkmnName)"
             :style="{
-                left: (entry.xPx - spriteSize / 2 + getRerankOffset(entry.pkmnName)) + 'px',
-                top: entry.yPx + 'px',
+                left: (entry.xPx - spriteSize / 2 + getRerankOffsetX(entry.pkmnName)) + 'px',
+                top: (entry.yPx + getRerankOffsetY(entry.pkmnName)) + 'px',
             }"
             @click.stop="
                 if (!$event.ctrlKey) {
@@ -1481,27 +1485,8 @@ defineExpose({
     white-space: nowrap;
 }
 
-/* Timeline re-ranking: fade out at old position */
-.timeline-rerank-fade-out {
-    opacity: 0 !important;
-    transition: opacity 1s ease !important;
-}
-
-/* Hidden while repositioning */
-.timeline-rerank-invisible {
-    opacity: 0 !important;
-}
-
 /* Visible during slide (sprite shown, offset animated via JS) */
 .timeline-rerank-sliding {
-    opacity: 0.7 !important;
-    z-index: 50 !important;
-}
-
-/* Fade in at new position */
-.timeline-rerank-fade-in {
-    opacity: 1 !important;
-    transition: opacity 600ms ease !important;
     z-index: 50 !important;
 }
 

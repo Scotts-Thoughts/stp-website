@@ -307,7 +307,14 @@ function setupIpcHandlers(): void {
     // 1. Try require('ffmpeg-static') — works in dev when node_modules is intact
     try {
       const fromRequire = require('ffmpeg-static')
-      if (fromRequire) candidates.push(fromRequire)
+      if (fromRequire) {
+        // In packaged app, the binary is inside the asar archive where execFile can't reach it.
+        // asarUnpack extracts it to app.asar.unpacked — check that path first.
+        if (fromRequire.includes('app.asar')) {
+          candidates.push(fromRequire.replace('app.asar', 'app.asar.unpacked'))
+        }
+        candidates.push(fromRequire)
+      }
     } catch { /* ignore */ }
 
     // 2. Relative to compiled electron main (dist-electron/../node_modules)

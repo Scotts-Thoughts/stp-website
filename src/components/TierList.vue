@@ -2,8 +2,12 @@
 import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
-import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase } from '../store';
+import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
+
+const emit = defineEmits<{
+    restoreContextMenu: []
+}>();
 
 const enum TierlistTierIndex {
     S = 0,
@@ -24,6 +28,7 @@ const fileexporter = useFileExporter();
 const toast = useToast();
 const workspace = useWorkspace();
 const reranking = useReranking();
+const contextMenu = useContextMenu();
 
 // Track scroll state for each tier row
 const tierScrollState = reactive<Record<number, { 
@@ -484,6 +489,70 @@ function handleThresholdInputPaste(event: ClipboardEvent) {
     thresholdDigits.value = digitList;
 }
 
+// Threshold right-click context menu
+function handleThresholdContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const thresholdList = tierlist.activeThresholdList;
+    if (!thresholdList) return;
+
+    const currentThreshold = thresholdList[tierlist.activeThresholdIndex];
+    if (!currentThreshold) return;
+
+    const restoreMenu = () => emit('restoreContextMenu');
+
+    const options = [
+        {
+            label: 'Save Thresholds As...',
+            action() {
+                restoreMenu();
+                const name = prompt('Enter a name for this threshold group:');
+                if (!name || !name.trim()) return;
+
+                // Clone current threshold data
+                const newThreshold = {
+                    label: name.trim(),
+                    data: [...currentThreshold.data],
+                };
+
+                // Add to the list
+                thresholdList.push(newThreshold);
+
+                // Switch to the new threshold
+                tierlist.activeThresholdIndex = thresholdList.length - 1;
+
+                toast.addToast(`Saved thresholds as "${name.trim()}"`, 'success', { timeout: 2000 });
+            },
+        },
+        {
+            label: 'Rename Threshold...',
+            hidden: () => thresholdList.length <= 1,
+            action() {
+                restoreMenu();
+                const name = prompt('Enter a new name:', currentThreshold.label);
+                if (!name || !name.trim()) return;
+                currentThreshold.label = name.trim();
+                toast.addToast(`Renamed to "${name.trim()}"`, 'info', { timeout: 2000 });
+            },
+        },
+        {
+            label: 'Delete Threshold',
+            hidden: () => thresholdList.length <= 1,
+            action() {
+                restoreMenu();
+                const idx = tierlist.activeThresholdIndex;
+                thresholdList.splice(idx, 1);
+                tierlist.activeThresholdIndex = Math.min(idx, thresholdList.length - 1);
+                toast.addToast('Threshold deleted', 'info', { timeout: 2000 });
+            },
+        },
+    ];
+
+    contextMenu.setOptions(options);
+    contextMenu.show(event.clientX, event.clientY);
+}
+
 // Tier image change (Surge = index 7, Bruno = index 8)
 function handleTierImageClick(event: MouseEvent, tierIndex: number) {
     event.stopPropagation();
@@ -588,19 +657,14 @@ function handleTierLabelInputKeydown(event: KeyboardEvent) {
 
 // --- Animate Re-Ranking ---
 //
-// The animation happens in two halves, with data applied in between:
+//   FADE_OUT (1s)     — fade opacity to 0
+//   COLLAPSE_GAP (1s) — neighbors slide in to fill the gap
+//   [data swap]        — Vue re-renders, entry moves to new position
+//   OPEN_SPACE (1s)   — neighbors slide apart to make room
+//   FADE_IN (0.6s)    — fade in
+//   HIGHLIGHT (0.8s)  — glow pulse
 //
-//   HALF 1 (entry is still at its OLD position — data not yet applied):
-//     FADE_OUT (1s)     — slowly fade the entry to invisible
-//     COLLAPSE_GAP (1s) — collapse its width to 0; neighbors slide in to fill the gap
-//
-//   >>> data is applied here — Vue re-renders, entry moves to its NEW position <<<
-//
-//   HALF 2 (entry is now at its NEW position):
-//     OPEN_SPACE (1s)   — entry starts at 0 width, expands; neighbors slide apart
-//     FADE_IN (0.6s)    — fade in + highlight glow
-//
-// Total ≈ 4 seconds.
+// Total ≈ 4.4 seconds.
 
 const FADE_OUT_MS  = 1000;
 const COLLAPSE_MS  = 1000;
@@ -610,6 +674,14 @@ const HIGHLIGHT_MS = 800;
 
 // Track which entry is currently animating and its CSS class
 const rerankAnimClass = ref<Map<string, string>>(new Map());
+
+// Data prepared in COLLAPSE_GAP for OPEN_SPACE to animate (no yields between setup and animation)
+let openSpaceData: {
+    el: HTMLElement;
+    w: number;
+    ml: number;
+    compensated: { el: HTMLElement; offset: number }[];
+} | null = null;
 
 function getRerankClass(pkmnName: string): string {
     return rerankAnimClass.value.get(pkmnName) || '';
@@ -680,61 +752,94 @@ watch(() => reranking.phase, async (phase) => {
     if (phase === RerankPhase.COLLAPSE_GAP) {
         const el = findPokemonEl(pokemon, reranking.oldTierIndex);
         if (el) {
-            // Measure natural width. We'll use a negative margin-right to pull
-            // neighbors in, which is much smoother than animating width.
             const w = el.getBoundingClientRect().width;
             el.style.opacity = '0';
             el.style.overflow = 'hidden';
 
             await animate(COLLAPSE_MS, (t) => {
-                // Shrink via margin — neighbors slide smoothly into the gap
                 el.style.marginRight = (-w * t) + 'px';
-                // Visually scale down to match
                 el.style.transform = `scaleX(${1 - t})`;
                 el.style.transformOrigin = 'left center';
             });
         }
 
-        // Clean up inline styles before data change
-        if (el) el.style.cssText = '';
+        // Snapshot sibling positions BEFORE data swap
+        const preSwapPositions = new Map<Element, number>();
+        const tierEl = document.querySelector('.tier-list');
+        if (tierEl) {
+            for (const child of tierEl.querySelectorAll('.entry-row [data-pokemon]')) {
+                preSwapPositions.set(child, (child as HTMLElement).offsetLeft);
+            }
+        }
 
-        // ── Apply data NOW ──
-        rerankAnimClass.value = new Map();
+        // Hide new element via CSS class so it doesn't flash after data swap
+        rerankAnimClass.value = new Map([[pokemon, 'rerank-hidden']]);
+
+        // Apply data — Vue re-renders, entry moves to new position
         applyPendingInsertions();
+        await nextTick();
+        await nextTick();
 
-        await nextTick();
-        await nextTick();
+        // IMMEDIATELY collapse and compensate — no more yields before this!
+        const newEl = findPokemonEl(pokemon, reranking.newTierIndex);
+        if (newEl) {
+            const w2 = newEl.getBoundingClientRect().width;
+            const ml = parseFloat(getComputedStyle(newEl).marginLeft) || 0;
+
+            rerankAnimClass.value = new Map();
+            newEl.style.opacity = '0';
+            newEl.style.overflow = 'hidden';
+            newEl.style.marginRight = (-w2) + 'px';
+            newEl.style.marginLeft = '0';
+            newEl.style.transform = 'scaleX(0)';
+            newEl.style.transformOrigin = 'left center';
+
+            // Force reflow then compensate shifted siblings
+            void newEl.offsetWidth;
+            const row = newEl.parentElement;
+            const compensated: { el: HTMLElement; offset: number }[] = [];
+            if (row) {
+                for (const child of row.children) {
+                    if (child === newEl || !(child as HTMLElement).dataset?.pokemon) continue;
+                    const oldLeft = preSwapPositions.get(child);
+                    if (oldLeft !== undefined) {
+                        const delta = (child as HTMLElement).offsetLeft - oldLeft;
+                        if (Math.abs(delta) > 0.5) {
+                            (child as HTMLElement).style.transform = `translateX(${-delta}px)`;
+                            compensated.push({ el: child as HTMLElement, offset: -delta });
+                        }
+                    }
+                }
+            }
+
+            openSpaceData = { el: newEl, w: w2, ml, compensated };
+        }
 
         reranking.setPhase(RerankPhase.OPEN_SPACE);
         return;
     }
 
-    // ── HALF 2: animate at the NEW position (data applied) ──
+    // ── HALF 2: animate at the NEW position (data applied, already collapsed + compensated) ──
 
     if (phase === RerankPhase.OPEN_SPACE) {
-        await nextTick();
-
-        const el = findPokemonEl(pokemon, reranking.newTierIndex);
-        if (el) {
-            const w = el.getBoundingClientRect().width;
-
-            // Start fully collapsed
-            el.style.opacity = '0';
-            el.style.overflow = 'hidden';
-            el.style.marginRight = (-w) + 'px';
-            el.style.transform = 'scaleX(0)';
-            el.style.transformOrigin = 'left center';
+        if (openSpaceData) {
+            const { el, w, ml, compensated } = openSpaceData;
 
             scrollPokemonIntoView(pokemon, reranking.newTierIndex);
 
             await animate(OPEN_MS, (t) => {
                 el.style.marginRight = (-w * (1 - t)) + 'px';
+                el.style.marginLeft = (ml * t) + 'px';
                 el.style.transform = `scaleX(${t})`;
+                for (const c of compensated) {
+                    c.el.style.transform = `translateX(${c.offset * (1 - t)}px)`;
+                }
             });
 
-            // Reset transform/margin, keep invisible for fade-in
             el.style.cssText = '';
             el.style.opacity = '0';
+            for (const c of compensated) c.el.style.transform = '';
+            openSpaceData = null;
         }
 
         reranking.setPhase(RerankPhase.FADE_IN);
@@ -911,11 +1016,12 @@ function sleep(ms: number): Promise<void> {
                     </PkmnImage>
                 </div>
                 <!-- Threshold label -->
-                <div 
+                <div
                     v-if="editingThresholdIndex !== i"
                     class="threshold-label"
                     :class="{ 'threshold-label-editable': isTimeMetricEditable && i !== 9 }"
                     @click.stop="startEditingThreshold(i)"
+                    @contextmenu.prevent.stop="handleThresholdContextMenu($event)"
                 >{{ data.labels[i] }}</div>
                 <input
                     v-else
@@ -1223,11 +1329,10 @@ function sleep(ms: number): Promise<void> {
     right: 7px;
     transform: translateY(-50%);
     z-index: 6;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .entry-row-wrapper .threshold-label.threshold-label-editable {
-    pointer-events: auto;
     cursor: pointer;
     transition: opacity 0.2s;
 }
@@ -1507,6 +1612,11 @@ function sleep(ms: number): Promise<void> {
 
 /* Phases 2–4 (collapse, open, fade-in) use inline styles set by JS
    so the browser transitions from measured pixel values, not auto. */
+
+/* Hide new element instantly after data swap (before fade-in starts) */
+:deep(.rerank-hidden) {
+    opacity: 0 !important;
+}
 
 /* Phase 5: Highlight glow */
 :deep(.rerank-highlight) {
