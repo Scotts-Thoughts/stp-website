@@ -258,7 +258,7 @@ function onRowWheel(e: WheelEvent) {
     wrapper.scrollLeft += e.deltaY;
 }
 
-// Function to get cartridge color based on game/tierlist name (fallback for backwards compatibility)
+// Function to get cartridge color based on game name
 function getCartridgeColor(name: string): string {
     const lowerName = name.toLowerCase();
 
@@ -354,6 +354,24 @@ const showCreateModal = ref(false);
 const newTierlistGame = ref(TIERLIST_GAMES[0]?.name ?? 'Yellow');
 const newTierlistName = ref('');
 
+const showRenameModal = ref(false);
+const renameIndex = ref(-1);
+const renameValue = ref('');
+
+function openRenameModal(index: number, currentName: string) {
+    renameIndex.value = index;
+    renameValue.value = currentName;
+    showRenameModal.value = true;
+}
+
+function submitRename() {
+    if (renameValue.value.trim() && renameIndex.value >= 0) {
+        workspace.renameTierlist(renameIndex.value, renameValue.value);
+        workspace.saveWorkspace();
+    }
+    showRenameModal.value = false;
+}
+
 watch(groupByGame, (on) => {
     if (!on) popoverGame.value = null;
 });
@@ -404,6 +422,12 @@ async function createNewTierlist() {
 function buildContextMenuOptions(tierlist: { visible?: boolean; name?: string }, index: number) {
     const isHidden = tierlist.visible === false;
     return [
+        {
+            label: 'Rename',
+            action: () => {
+                openRenameModal(index, tierlist.name ?? '');
+            },
+        },
         {
             label: isHidden ? 'Unhide tierlist' : 'Hide tierlist',
             action: () => {
@@ -511,7 +535,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -535,7 +559,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -557,7 +581,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -579,7 +603,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -601,7 +625,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -623,7 +647,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -645,7 +669,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -667,7 +691,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                             :cartridgeImage="effectiveCartridgeImage(group.firstTierlist)"
                             :platform="group.firstTierlist.platform"
                             :game="group.game"
-                            :class="[getCartridgeColor(group.tierlists.length > 1 ? group.game : group.firstTierlist.name), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
+                            :class="[getCartridgeColor(group.game), groupHasHiddenTierlist(group) ? 'hidden-tierlist' : '']"
                         />
                     </div>
                 </div>
@@ -708,7 +732,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -726,7 +750,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -744,7 +768,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -762,7 +786,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -780,7 +804,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -798,7 +822,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -816,7 +840,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -836,7 +860,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -854,7 +878,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -872,7 +896,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -890,7 +914,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -908,7 +932,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -926,7 +950,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -944,7 +968,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -962,7 +986,7 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                         :cartridgeImage="effectiveCartridgeImage(t)"
                         :platform="t.platform"
                         :game="t.game"
-                        :class="[getCartridgeColor(t.name), t.visible === false ? 'hidden-tierlist' : '']"
+                        :class="[getCartridgeColor(t.game), t.visible === false ? 'hidden-tierlist' : '']"
                         @click="emit('select', workspace.tierlists.indexOf(t))"
                         @contextmenu.prevent="onCartridgeContextMenu($event, t, workspace.tierlists.indexOf(t))"
                     />
@@ -1006,6 +1030,20 @@ function onGroupContextMenu(e: MouseEvent, group: GameGroup) {
                 <div class="modal-actions">
                     <button class="cancel-btn" @click="showCreateModal = false">Cancel</button>
                     <button class="create-btn" @click="createNewTierlist">Create</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showRenameModal" class="modal-overlay" @click.self="showRenameModal = false">
+            <div class="modal create-tierlist-modal">
+                <h2>Rename tierlist</h2>
+                <div class="modal-field">
+                    <label for="rename-tierlist-name">Name</label>
+                    <input id="rename-tierlist-name" v-model="renameValue" type="text" @keydown.enter="submitRename" />
+                </div>
+                <div class="modal-actions">
+                    <button class="cancel-btn" @click="showRenameModal = false">Cancel</button>
+                    <button class="create-btn" @click="submitRename">Rename</button>
                 </div>
             </div>
         </div>

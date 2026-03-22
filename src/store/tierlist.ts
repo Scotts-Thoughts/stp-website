@@ -13,6 +13,12 @@ export type Tierlist = {
     total: number[]
     thresholds_first: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
     thresholds_best: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
+    thresholds_recent?: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
+    thresholdDefaults?: {
+        first?: Record<string, string>
+        best?: Record<string, string>
+        recent?: Record<string, string>
+    }
     entries: Record<string, TierlistEntry>
     imageSource?: string
     platform?: string
@@ -73,13 +79,26 @@ export const useTierlist = defineStore("tierlist", () => {
 
     const activeTierlist = computed(() => workspace.activeTierlist);
 
+    function resolveDefaultThresholdIndex() {
+        const tl = workspace.activeTierlist;
+        const defaults = tl.thresholdDefaults;
+        if (!defaults) { activeThresholdIndex.value = 0; return; }
+        const viewKey = activeCategory.value === 'first' ? 'first' : activeCategory.value === 'recent' ? 'recent' : 'best';
+        const label = defaults[viewKey]?.[activeMetric.value];
+        if (!label) { activeThresholdIndex.value = 0; return; }
+        const list = activeThresholdList.value;
+        if (!list) { activeThresholdIndex.value = 0; return; }
+        const idx = list.findIndex(t => t.label === label);
+        activeThresholdIndex.value = idx >= 0 ? idx : 0;
+    }
+
     watch(() => workspace.activeTierlist, () => {
-        activeThresholdIndex.value = 0;
         activeTotalIndex.value = 0;
+        resolveDefaultThresholdIndex();
     });
 
     watch(() => activeCategory.value, () => {
-        activeThresholdIndex.value = 0;
+        resolveDefaultThresholdIndex();
     });
 
     watch(() => activeMetric.value, () => {
@@ -239,12 +258,13 @@ export const useTierlist = defineStore("tierlist", () => {
         return list;
     });
 
+    const recentThresholds = computed(() => activeTierlist.value.thresholds_recent ?? {});
     const activeThresholdList = computed(() => {
         if (activeCategory.value === "first") {
             return firstThresholds.value[activeMetric.value];
         } else if (activeCategory.value === "recent") {
-            // Use best thresholds for recent attempts (both are followup attempts)
-            return bestTresholds.value[activeMetric.value];
+            // Use thresholds_recent if available, fall back to thresholds_best
+            return recentThresholds.value[activeMetric.value] ?? bestTresholds.value[activeMetric.value];
         } else {
             return bestTresholds.value[activeMetric.value];
         }

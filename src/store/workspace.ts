@@ -40,13 +40,52 @@ function defaultTierlistFilename(gameName: string): string {
 }
 
 /** JSON shape for a blank "Default Tierlist" per game (used when creating a new workspace). */
+const DEFAULT_THRESHOLDS_JSON = {
+    realtime: [{
+        label: "default",
+        data: ["1:00:00.00", "1:15:00.00", "1:30:00.00", "1:45:00.00", "2:00:00.00", "2:30:00.00", "3:00:00.00", "3:30:00.00"]
+    }],
+    gametime: [{
+        label: "default",
+        data: ["3:30:00", "4:00:00", "4:30:00", "5:00:00", "5:30:00", "6:00:00", "7:00:00", "8:00:00"]
+    }],
+    level: [{
+        label: "default",
+        data: [60, 65, 70, 75, 80, 85, 90, 95]
+    }],
+    resets: [{
+        label: "default",
+        data: [1, 5, 10, 15, 20, 30, 40, 50]
+    }],
+};
+
+const DEFAULT_THRESHOLDS_PARSED = {
+    realtime: [{
+        label: "default",
+        data: DEFAULT_THRESHOLDS_JSON.realtime[0].data.map(parseTime)
+    }],
+    gametime: [{
+        label: "default",
+        data: DEFAULT_THRESHOLDS_JSON.gametime[0].data.map(parseTime)
+    }],
+    level: [{
+        label: "default",
+        data: [...DEFAULT_THRESHOLDS_JSON.level[0].data]
+    }],
+    resets: [{
+        label: "default",
+        data: [...DEFAULT_THRESHOLDS_JSON.resets[0].data]
+    }],
+};
+
 function blankDefaultTierlistJson(game: { name: string; platform: string; cartridgeImage?: string }) {
     return {
         name: 'Default Tierlist',
         game: game.name,
         total: [0],
-        thresholds_first: {},
-        thresholds_best: {},
+        thresholds_first: DEFAULT_THRESHOLDS_JSON,
+        thresholds_best: DEFAULT_THRESHOLDS_JSON,
+        thresholds_recent: DEFAULT_THRESHOLDS_JSON,
         entries: {},
         platform: game.platform,
         ...(game.cartridgeImage && { cartridgeImage: game.cartridgeImage }),
@@ -126,6 +165,12 @@ export const useWorkspace = defineStore("workspace", () => {
     function setTierlistVisible(index: number, visible: boolean) {
         if (index >= 0 && index < tierlists.value.length) {
             tierlists.value[index].visible = visible;
+        }
+    }
+
+    function renameTierlist(index: number, newName: string) {
+        if (index >= 0 && index < tierlists.value.length && newName.trim()) {
+            tierlists.value[index].name = newName.trim();
         }
     }
 
@@ -278,7 +323,7 @@ export const useWorkspace = defineStore("workspace", () => {
             return Result.failure("Tierlist already exists.");
         }
 
-        await fs.write(path, stringify(tierlist));
+        await fs.write(path, stringifyTierlist(tierlist));
         tierlists.value.push(tierlist);
         tierlists.value.sort(sortTierlistsByGameOrder);
 
@@ -469,6 +514,7 @@ export const useWorkspace = defineStore("workspace", () => {
         setActiveTierlist,
         insertActiveTierlistEntry,
         setTierlistVisible,
+        renameTierlist,
         moveTierlistToTrash,
         deleteTierlist,
         getTrashContents,
@@ -510,6 +556,7 @@ function parseTierlist(data: string): Tierlist | undefined {
     tierlist.total = tierlistRaw.total;
     tierlist.thresholds_first = {};
     tierlist.thresholds_best = {};
+    tierlist.thresholds_recent = tierlistRaw.thresholds_recent ? {} : undefined;
     tierlist.imageSource = tierlistRaw.imageSource;
     // Ensure platform and cartridgeImage from config so tierlists appear in correct row (e.g. Red, Yellow, Crystal)
     const gameConfig = getGameConfig(tierlist.game);
@@ -538,38 +585,27 @@ function parseTierlist(data: string): Tierlist | undefined {
     }
 
     // process thresholds, ensure they are in the correct format
-    for (const key of METRIC_TIME_KEYS) {
-        const thresholds_first = tierlistRaw.thresholds_first[key];
-        const thresholds_best = tierlistRaw.thresholds_best[key];
-
-        if (thresholds_first) {
-            tierlist.thresholds_first[key] = thresholds_first.map((x: any) => ({
-                label: x.label,
-                data: x.data.map(parseTime)
-            }));
+    const thresholdSources = [
+        { raw: tierlistRaw.thresholds_first, parsed: tierlist.thresholds_first },
+        { raw: tierlistRaw.thresholds_best, parsed: tierlist.thresholds_best },
+        ...(tierlistRaw.thresholds_recent ? [{ raw: tierlistRaw.thresholds_recent, parsed: tierlist.thresholds_recent! }] : []),
+    ];
+    for (const { raw, parsed } of thresholdSources) {
+        for (const key of METRIC_TIME_KEYS) {
+            if (raw[key]) {
+                parsed[key] = raw[key].map((x: any) => ({
+                    label: x.label,
+                    data: x.data.map(parseTime)
+                }));
+            }
         }
-        if (thresholds_best) {
-            tierlist.thresholds_best[key] = thresholds_best.map((x: any) => ({
-                label: x.label,
-                data: x.data.map(parseTime)
-            }));
-        }
-    }
-    for (const key of METRIC_NUMBER_KEYS) {
-        const thresholds_first = tierlistRaw.thresholds_first[key];
-        const thresholds_best = tierlistRaw.thresholds_best[key];
-
-        if (thresholds_first) {
-            tierlist.thresholds_first[key] = thresholds_first.map((x: any) => ({
-                label: x.label,
-                data: [...x.data]
-            }));
-        }
-        if (thresholds_best) {
-            tierlist.thresholds_best[key] = thresholds_best.map((x: any) => ({
-                label: x.label,
-                data: [...x.data]
-            }));
+        for (const key of METRIC_NUMBER_KEYS) {
+            if (raw[key]) {
+                parsed[key] = raw[key].map((x: any) => ({
+                    label: x.label,
+                    data: [...x.data]
+                }));
+            }
         }
     }
 
@@ -647,39 +683,27 @@ function stringifyTierlist(tierlist: Tierlist): string {
     }
 
     tierlistRaw.entries = {};
-    for (const key of METRIC_TIME_KEYS) {
-        const thresholds_first = tierlist.thresholds_first[key];
-        const thresholds_best = tierlist.thresholds_best[key];
-        const formatter = METRIC[key].formatValue!;
-
-        if (thresholds_first) {
-            tierlistRaw.thresholds_first[key] = thresholds_first.map(x => ({
-                label: x.label,
-                data: x.data.map(formatter)
-            }));
-        }
-        if (thresholds_best) {
-            tierlistRaw.thresholds_best[key] = thresholds_best.map(x => ({
-                label: x.label,
-                data: x.data.map(formatter)
-            }));
-        }
+    if (tierlist.thresholds_recent) {
+        tierlistRaw.thresholds_recent = {};
     }
-    for (const key of METRIC_NUMBER_KEYS) {
-        const thresholds_first = tierlist.thresholds_first[key];
-        const thresholds_best = tierlist.thresholds_best[key];
-
-        if (thresholds_first) {
-            tierlistRaw.thresholds_first[key] = thresholds_first.map(x => ({
-                label: x.label,
-                data: [...x.data]
-            }));
+    const stringifySources = [
+        { src: tierlist.thresholds_first, dst: tierlistRaw.thresholds_first },
+        { src: tierlist.thresholds_best, dst: tierlistRaw.thresholds_best },
+        ...(tierlist.thresholds_recent ? [{ src: tierlist.thresholds_recent, dst: tierlistRaw.thresholds_recent }] : []),
+    ];
+    for (const { src, dst } of stringifySources) {
+        for (const key of METRIC_TIME_KEYS) {
+            const arr = src[key];
+            if (arr) {
+                const formatter = METRIC[key].formatValue!;
+                dst[key] = arr.map(x => ({ label: x.label, data: x.data.map(formatter) }));
+            }
         }
-        if (thresholds_best) {
-            tierlistRaw.thresholds_best[key] = thresholds_best.map(x => ({
-                label: x.label,
-                data: [...x.data]
-            }));
+        for (const key of METRIC_NUMBER_KEYS) {
+            const arr = src[key];
+            if (arr) {
+                dst[key] = arr.map(x => ({ label: x.label, data: [...x.data] }));
+            }
         }
     }
 
@@ -729,8 +753,9 @@ function generateTierlist(name: string, game?: string): Tierlist {
         name,
         game: gameName,
         total: [0],
-        thresholds_first: {},
-        thresholds_best: {},
+        thresholds_first: DEFAULT_THRESHOLDS_PARSED,
+        thresholds_best: DEFAULT_THRESHOLDS_PARSED,
+        thresholds_recent: DEFAULT_THRESHOLDS_PARSED,
         entries: {},
         platform: config?.platform,
         cartridgeImage: config?.cartridgeImage,

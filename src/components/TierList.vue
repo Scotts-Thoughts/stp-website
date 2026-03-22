@@ -1373,7 +1373,7 @@ function sleep(ms: number): Promise<void> {
     right: 7px;
     transform: translateY(-50%);
     z-index: 6;
-    pointer-events: none;
+    pointer-events: auto;
 
     font-size: 30px;
     color: #ffffff;

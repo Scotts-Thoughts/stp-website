@@ -11,6 +11,7 @@ import EditMetricsWindow from './EditMetricsWindow.vue'
 import InsertMetricsWindow from './InsertMetricsWindow.vue'
 import InsertCsvMetricsWindow from './InsertCsvMetricsWindow.vue'
 import EditFilterWindow from './EditFilterWindow.vue'
+import EditThresholdsWindow from './EditThresholdsWindow.vue'
 import SearchWindow from './SearchWindow.vue'
 import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
@@ -114,6 +115,7 @@ const enum Mode {
     EDIT_METRIC,
     EDIT_VIEW,
     EDIT_FILTER,
+    EDIT_THRESHOLDS,
 }
 
 const mode = ref<Mode>(Mode.VIEWING);
@@ -188,6 +190,13 @@ const mainContextMenuOptions = [
         shortcut: "F",
         action() {
             mode.value = mode.value === Mode.EDIT_FILTER ? Mode.VIEWING : Mode.EDIT_FILTER;
+        }
+    },
+    {
+        label: "Thresholds",
+        shortcut: "G",
+        action() {
+            mode.value = mode.value === Mode.EDIT_THRESHOLDS ? Mode.VIEWING : Mode.EDIT_THRESHOLDS;
         }
     },
     {
@@ -530,6 +539,7 @@ onKeyDown('F1', async (e) => {
         <EditMetricsWindow   :visible="mode === Mode.EDIT_METRIC"    @close="mode = Mode.VIEWING" />
         <EditViewWindow      :visible="mode === Mode.EDIT_VIEW"      @close="mode = Mode.VIEWING" />
         <EditFilterWindow    :visible="mode === Mode.EDIT_FILTER"    @close="mode = Mode.VIEWING" />
+        <EditThresholdsWindow :visible="mode === Mode.EDIT_THRESHOLDS" @close="mode = Mode.VIEWING" />
         <SearchWindow        :visible="searchActive"                 @close="searchActive = false" />
         <QuickCalendarPopup  :visible="quickCalendarActive"          @close="quickCalendarActive = false" />
     </Teleport>
