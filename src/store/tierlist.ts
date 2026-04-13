@@ -179,24 +179,16 @@ export const useTierlist = defineStore("tierlist", () => {
         const releaseDateTresh = parseDate(releaseDateTreshold.value);
         const list = [];
         for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
-            // ignore entries with only first attempts
-            if (entry.attempts.length <= 1) {
-                continue;
-            }
             // only include attempts that are before the release date treshold
             let attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
-            // if none of the attempts are before the release date treshold, skip this entry
-            if (attempts.length === 0) {
-                continue;
-            }
-            // if only the first attempt is before the release date treshold, skip this entry
-            if (attempts.length === 1 && attempts[0] === entry.attempts[0]) {
+            // followup view requires at least 2 visible attempts to compare
+            if (attempts.length < 2) {
                 continue;
             }
             // filter by year (when year filter is active, consider all attempts within selected years)
             if (includeYearList.value.length > 0) {
                 attempts = attempts.filter(attempt => filterByYear(attempt.releasedate));
-                if (attempts.length === 0) {
+                if (attempts.length < 2) {
                     continue;
                 }
             }
