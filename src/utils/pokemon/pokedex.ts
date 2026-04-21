@@ -87,14 +87,30 @@ export function getPokemonData(game: string, pokemonName: string) {
         throw new Error(`Game "${game}" (mapped to "${pokedexKey}") not found in game list release order.`);
     }
 
-    // Extract base species name to handle forms (e.g., "Deoxys-Attack" -> "Deoxys")
+    // Try the original name first so species whose canonical name contains a hyphen
+    // (Ho-Oh, Porygon-Z, Jangmo-o, Hakamo-o, Kommo-o) aren't mis-stripped by form handling.
+    // Fall back to the base species name to handle forms (e.g., "Deoxys-Attack" -> "Deoxys").
+    // Case-insensitive match as a last resort catches tierlist/pokedex casing drift
+    // (e.g. tierlist "Ho-oh" vs pokedex "Ho-Oh").
     const baseName = getBaseSpeciesName(pokemonName);
+    const lookupNames = baseName === pokemonName ? [pokemonName] : [pokemonName, baseName];
 
     for (let i = index; i < gameListReleaseOrder.length; i++) {
         const currentGame = gameListReleaseOrder[i];
         const currentPokedex = pokedexData[currentGame];
-        if (currentPokedex && currentPokedex[baseName]) {
-            return currentPokedex[baseName];
+        if (!currentPokedex) continue;
+        for (const name of lookupNames) {
+            if (currentPokedex[name]) {
+                return currentPokedex[name];
+            }
+        }
+        for (const name of lookupNames) {
+            const target = name.toLowerCase();
+            for (const key of Object.keys(currentPokedex)) {
+                if (key.toLowerCase() === target) {
+                    return currentPokedex[key];
+                }
+            }
         }
     }
 
