@@ -110,6 +110,7 @@ const selectedFile = ref<File | null>(null);
 const fileContent = ref<string>("");
 const parsedData = ref<any[]>([]);
 const errorMessage = ref<string>("");
+const duplicateWarning = ref<string>("");
 const runDate = ref<string>("");
 const pokemonForm = ref<string>("");
 const alternativeMoveType = ref<string>("");
@@ -138,6 +139,7 @@ function reset() {
     fileContent.value = "";
     parsedData.value = [];
     errorMessage.value = "";
+    duplicateWarning.value = "";
     runDate.value = (props.initialFile && props.cachedDate) ? props.cachedDate : currentDate();
     pokemonForm.value = "";
     alternativeMoveType.value = "";
@@ -228,6 +230,7 @@ async function loadFile(file: File) {
 
     selectedFile.value = file;
     errorMessage.value = "";
+    duplicateWarning.value = "";
 
     // Read file content
     const content = await file.text();
@@ -315,15 +318,15 @@ function parseCsvData(content: string) {
     }
 }
 
-async function importMetrics() {
+async function importMetrics(force: boolean = false) {
     if (parsedData.value.length === 0) {
         errorMessage.value = "No data to import";
         return;
     }
-    
+
     const workspace = useWorkspace();
     const row = parsedData.value[0]; // Only one row (the last row)
-    
+
     try {
         // Validate required fields using editable values
         const missingFields = [];
@@ -358,6 +361,26 @@ async function importMetrics() {
             resets: resets,
             blackouts: blackouts,
         };
+
+        // Duplicate detection: same Pokémon already has an attempt with
+        // matching releasedate + gametime, and a realtime within one tenth
+        // of a second (treat centisecond-level differences as the same run)
+        if (!force) {
+            const REALTIME_TOLERANCE_MS = 100;
+            const existing = workspace.activeTierlist?.entries?.[pokemon];
+            const isDuplicate = existing?.attempts?.some(a =>
+                a.releasedate === attempt.releasedate &&
+                a.gametime === attempt.gametime &&
+                Math.abs(a.realtime - attempt.realtime) <= REALTIME_TOLERANCE_MS
+            );
+            if (isDuplicate) {
+                duplicateWarning.value = `An attempt for ${pokemon} on ${runDate.value} with realtime ${realtime} and gametime ${gametime} already exists. Press "Add Data Anyway" to add it regardless.`;
+                errorMessage.value = "";
+                return;
+            }
+        }
+
+        duplicateWarning.value = "";
 
         // If animate reranking is enabled, buffer instead of applying immediately
         const global = useGlobal();
@@ -442,6 +465,10 @@ async function importMetrics() {
             <div v-if="errorMessage" style="color: #ff6b6b; font-size: 14px; padding: 8px; background: #ffe0e0; border-radius: 4px;">
                 {{ errorMessage }}
             </div>
+
+            <div v-if="duplicateWarning" style="color: #8a5a00; font-size: 14px; padding: 8px; background: #fff4cc; border: 1px solid #e6c200; border-radius: 4px;">
+                {{ duplicateWarning }}
+            </div>
             
             <div v-if="parsedData.length > 0">
                 <h3>Final Row Data:</h3>
@@ -475,8 +502,16 @@ async function importMetrics() {
             
             <div style="display: flex; gap: 8px; justify-content: flex-end;">
                 <button @click="$emit('close')">Cancel</button>
-                <button 
-                    @click="importMetrics" 
+                <button
+                    v-if="duplicateWarning"
+                    @click="importMetrics(true)"
+                    :disabled="parsedData.length === 0"
+                    style="background: #e6a500; color: white; border: none; padding: 8px 16px; border-radius: 4px;"
+                >
+                    Add Data Anyway
+                </button>
+                <button
+                    @click="importMetrics(false)"
                     :disabled="parsedData.length === 0"
                     style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px;"
                 >
