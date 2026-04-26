@@ -102,7 +102,7 @@ onMounted(() => {
         recent: ["Viewing Most Recent Attempts", "warning"],
     };
     const [msg, type] = categoryToast[tierlist.activeCategory] ?? categoryToast.first;
-    toast.addToast(msg, type, { timeout: 2000 });
+    toast.addToast(msg, type, { timeout: 2000, key: 'view-category' });
 });
 onUnmounted(() => {
     window.removeEventListener('resize', updateViewportScale);
@@ -215,13 +215,13 @@ const mainContextMenuOptions = [
         action() {
             if (tierlist.activeCategory === "first") {
                 tierlist.activeCategory = "best";
-                toast.addToast("Switched to Followup Attempts", "info", { timeout: 2000 })
+                toast.addToast("Switched to Followup Attempts", "info", { timeout: 2000, key: 'view-category' })
             } else if (tierlist.activeCategory === "best") {
                 tierlist.activeCategory = "recent";
-                toast.addToast("Switched to Most Recent Attempts", "warning", { timeout: 2000 })
+                toast.addToast("Switched to Most Recent Attempts", "warning", { timeout: 2000, key: 'view-category' })
             } else {
                 tierlist.activeCategory = "first";
-                toast.addToast("Switched to First Attempts", "error", { timeout: 2000 })
+                toast.addToast("Switched to First Attempts", "error", { timeout: 2000, key: 'view-category' })
             }
         },
     },
