@@ -1,7 +1,7 @@
 {
   "name": "pokemon-tierlist-creator",
   "private": true,
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "A tierlist creator for ranking Pokemon solo challenge playthroughs",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -13,7 +13,8 @@
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "electron:build": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder",
     "electron:release": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder --publish always",
-    "electron:preview": "npm run build && tsc -p electron/tsconfig.json && electron ."
+    "electron:preview": "npm run build && tsc -p electron/tsconfig.json && electron .",
+    "build:release": "node scripts/release.js"
   },
   "dependencies": {
     "@types/wicg-file-system-access": "^2023.10.4",

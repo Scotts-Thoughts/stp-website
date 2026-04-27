@@ -24,21 +24,24 @@ echo Bumping version: %CURRENT% -^> %NEW%
 :: Update package.json version
 powershell -Command "(Get-Content package.json) -replace '\"version\": \"%CURRENT%\"', '\"version\": \"%NEW%\"' | Set-Content package.json"
 
-:: Commit and tag
+:: Commit and push, then tag and push tag (GitHub Actions handles the build/publish)
 git add package.json
 git commit -m "v%NEW%"
-git tag "v%NEW%"
+git push origin main
+if %errorlevel% neq 0 (
+    echo.
+    echo Push to main failed. Resolve and re-run.
+    exit /b 1
+)
 
-:: Build and publish
-echo Building and publishing v%NEW%...
-npm run electron:release
+call npm run build:release
 
 if %errorlevel% equ 0 (
     echo.
-    echo Release v%NEW% published successfully!
-    echo Push to remote with: git push origin main --tags
+    echo Tag v%NEW% pushed. GitHub Actions is building and publishing the release.
+    echo Track progress at: https://github.com/Scotts-Thoughts/scotts-thoughts-tierlist-creator/actions
 ) else (
     echo.
-    echo Build failed. The commit and tag have been created locally.
-    echo Fix the issue and run: npm run electron:release
+    echo Tag push failed. Inspect the error above.
+    exit /b 1
 )
