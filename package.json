@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "generate-workspace": "tsx scripts/generate-bundled-workspace.ts",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "electron:build": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder",
+    "electron:build": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder --publish never",
     "electron:release": "npm run generate-workspace && npm run build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs', 'dist-electron/preload.cjs')\" && electron-builder --publish always",
     "electron:preview": "npm run build && tsc -p electron/tsconfig.json && electron .",
     "build:release": "node scripts/release.cjs"
