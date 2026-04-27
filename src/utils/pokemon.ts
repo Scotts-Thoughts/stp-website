@@ -137,7 +137,7 @@ export const pokemonNames = [
     "Chimecho",
     "Chinchou",
     "Chingling",
-    "Ciccino",
+    "Cinccino",
     "Cinderace",
     "Clamperl",
     "Clauncher",
