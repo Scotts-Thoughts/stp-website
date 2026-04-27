@@ -40,6 +40,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          repository: Scotts-Thoughts/scotts-thoughts-tierlist-creator
+          token: ${{ secrets.RELEASE_TOKEN }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           generate_release_notes: true
           files: artifacts/*

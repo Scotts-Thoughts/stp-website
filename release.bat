@@ -39,7 +39,7 @@ call npm run build:release
 if %errorlevel% equ 0 (
     echo.
     echo Tag v%NEW% pushed. GitHub Actions is building and publishing the release.
-    echo Track progress at: https://github.com/Scotts-Thoughts/scotts-thoughts-tierlist-creator/actions
+    echo Track progress at: https://github.com/Scotts-Thoughts/stp-website/actions
 ) else (
     echo.
     echo Tag push failed. Inspect the error above.
