@@ -31,6 +31,19 @@ contextBridge.exposeInMainWorld('electronUpdate', {
   install: () => ipcRenderer.invoke('update:install'),
 })
 
+// External-change watcher: lets the renderer subscribe to file-change notifications
+// the main process emits when the window gains focus and a tracked file's mtime
+// has advanced (e.g. the scheduler app wrote to a tierlist while we were unfocused).
+contextBridge.exposeInMainWorld('electronWatch', {
+  onExternalChange: (callback) => {
+    const listener = (_event, filenames) => callback(filenames)
+    ipcRenderer.on('workspace:externalChange', listener)
+    return () => ipcRenderer.removeListener('workspace:externalChange', listener)
+  },
+  acknowledgeChange: (filename) => ipcRenderer.invoke('watch:acknowledgeChange', filename),
+  checkNow: () => ipcRenderer.invoke('watch:checkNow'),
+})
+
 // Expose video export API
 contextBridge.exposeInMainWorld('electronVideo', {
   createTempDir: () => ipcRenderer.invoke('video:createTempDir'),

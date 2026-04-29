@@ -99,12 +99,47 @@ function ensureScottTierlistsFromBundle(): void {
   }
 }
 
+// --- External-change watcher ---
+// Tracks the last-known mtime of each workspace file the renderer has touched.
+// On window focus, we stat each tracked file and report any with newer mtimes
+// so the renderer can prompt the user to reload changed tierlists.
+const fileMtimes = new Map<string, number>()
+
+function recordMtime(filename: string): void {
+  try {
+    const filePath = path.join(getUserDataPath(), filename)
+    const stat = fs.statSync(filePath)
+    fileMtimes.set(filename, stat.mtimeMs)
+  } catch {
+    // File missing or unreadable — drop the entry so we don't false-positive later
+    fileMtimes.delete(filename)
+  }
+}
+
+function detectExternalChanges(): string[] {
+  const changed: string[] = []
+  for (const [filename, knownMtime] of fileMtimes.entries()) {
+    try {
+      const filePath = path.join(getUserDataPath(), filename)
+      const stat = fs.statSync(filePath)
+      // Treat anything newer than the snapshot as an external change
+      if (stat.mtimeMs > knownMtime + 1) {
+        console.log(`[watch] external change detected: ${filename} (snapshot=${knownMtime}, current=${stat.mtimeMs})`)
+        changed.push(filename)
+      }
+    } catch {
+      // File deleted out from under us — skip
+    }
+  }
+  return changed
+}
+
 function createWindow(): void {
   // Preload script path differs between dev and production
   const preloadPath = app.isPackaged
     ? path.join(__dirname, 'preload.cjs')
     : path.join(__dirname, '..', 'electron', 'preload.cjs')
-  
+
   const mainWindow = new BrowserWindow({
     width: 1920,
     height: 1080,
@@ -126,6 +161,19 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // On window focus, check if any tracked workspace file has been modified externally
+  // (e.g. by the scheduler app). If so, notify the renderer to prompt the user.
+  mainWindow.on('focus', () => {
+    console.log(`[watch] focus event — tracked files: ${fileMtimes.size}`)
+    const changed = detectExternalChanges()
+    if (changed.length > 0) {
+      console.log(`[watch] sending workspace:externalChange to renderer: ${changed.join(', ')}`)
+      mainWindow.webContents.send('workspace:externalChange', changed)
+    } else {
+      console.log('[watch] no changes detected on focus')
+    }
+  })
+
   // Load the app
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -140,7 +188,10 @@ function setupIpcHandlers(): void {
   ipcMain.handle('fs:readFile', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {
     const filePath = path.join(getUserDataPath(), filename)
     try {
-      return fs.readFileSync(filePath, 'utf-8')
+      const content = fs.readFileSync(filePath, 'utf-8')
+      // Snapshot the mtime so the focus-watcher can detect external edits later
+      recordMtime(filename)
+      return content
     } catch (error) {
       throw new Error(`Failed to read file: ${filename}`)
     }
@@ -157,10 +208,24 @@ function setupIpcHandlers(): void {
     const filePath = path.join(wsPath, filename)
     try {
       fs.writeFileSync(filePath, content, 'utf-8')
+      // Refresh the snapshot so our own write doesn't trigger a "changed externally" prompt
+      recordMtime(filename)
       return true
     } catch (error) {
       throw new Error(`Failed to write file: ${filename}`)
     }
+  })
+
+  // Renderer calls this after handling an external change (either reloaded or dismissed)
+  // so the next focus check uses the current on-disk mtime as the new baseline.
+  ipcMain.handle('watch:acknowledgeChange', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {
+    recordMtime(filename)
+  })
+
+  // Lets the renderer manually re-check on demand (e.g. on window blur→focus that
+  // didn't fire the focus event in some odd window-manager edge cases).
+  ipcMain.handle('watch:checkNow', async () => {
+    return detectExternalChanges()
   })
 
   ipcMain.handle('fs:fileExists', async (_event: Electron.IpcMainInvokeEvent, filename: string) => {

@@ -492,6 +492,103 @@ export const useWorkspace = defineStore("workspace", () => {
         tierlistBackups.value.set(filename, stringifyTierlist(tierlist));
     }
 
+    /**
+     * Re-read the given files from disk and replace their in-memory state.
+     * Used by the external-change modal when the user accepts a reload.
+     * Acknowledges each file with the watcher so focus events stop re-prompting.
+     */
+    async function reloadFiles(filenames: string[]) {
+        const fs = runningInElectron ? electronFilesystem.value : filesystem.value;
+        if (!fs) return Result.failure("Filesystem not ready.");
+
+        const errors: string[] = [];
+        for (const filename of filenames) {
+            try {
+                const data = await fs.read(filename);
+                const reloaded = parseTierlist(data);
+                if (!reloaded) {
+                    errors.push(`Could not parse ${filename}`);
+                    continue;
+                }
+                reloaded.filename = filename;
+                const idx = tierlists.value.findIndex(t => t.filename === filename);
+                if (idx >= 0) {
+                    tierlists.value[idx] = reloaded;
+                } else {
+                    tierlists.value.push(reloaded);
+                    tierlists.value.sort(sortTierlistsByGameOrder);
+                }
+                tierlistBackups.value.set(filename, data);
+                if (window.electronWatch) {
+                    await window.electronWatch.acknowledgeChange(filename);
+                }
+            } catch (e) {
+                errors.push(`${filename}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }
+
+        if (errors.length > 0) return Result.failure(errors.join('; '));
+        return Result.success(undefined);
+    }
+
+    /**
+     * Tell the watcher to forget any pending change for a file (without re-reading).
+     * Used when the user chooses "Keep current" — their next save will overwrite
+     * the external change, but we don't want the popup to fire again.
+     */
+    async function acknowledgeExternalChange(filename: string) {
+        if (window.electronWatch) {
+            await window.electronWatch.acknowledgeChange(filename);
+        }
+    }
+
+    /**
+     * Summarize unsaved local edits for a tierlist by diffing the current
+     * in-memory state against the backup snapshot taken at load/save time.
+     * Returns null when there are no unsaved changes.
+     */
+    function summarizeUnsavedChanges(filename: string): null | {
+        added: number;
+        removed: number;
+        modified: number;
+    } {
+        const current = tierlists.value.find(t => t.filename === filename);
+        if (!current) return null;
+        const backupText = tierlistBackups.value.get(filename);
+        if (!backupText) return null;
+
+        const currentText = stringifyTierlist(current);
+        if (currentText === backupText) return null;
+
+        let backup: Tierlist | undefined;
+        try {
+            backup = parseTierlist(backupText);
+        } catch {
+            backup = undefined;
+        }
+        if (!backup) {
+            // We know it differs but can't break it down — surface a single bucket
+            return { added: 0, removed: 0, modified: 1 };
+        }
+
+        const currentNames = new Set(Object.keys(current.entries));
+        const backupNames = new Set(Object.keys(backup.entries));
+        let added = 0, removed = 0, modified = 0;
+        for (const name of currentNames) {
+            if (!backupNames.has(name)) {
+                added++;
+            } else if (
+                stringifyEntries(current.entries[name]) !== stringifyEntries(backup.entries[name])
+            ) {
+                modified++;
+            }
+        }
+        for (const name of backupNames) {
+            if (!currentNames.has(name)) removed++;
+        }
+        return { added, removed, modified };
+    }
+
     function restoreTierlistEntries(filename: string, tierlist: Tierlist) {
         const backupContent = tierlistBackups.value.get(filename);
         if (!backupContent) return;
@@ -524,9 +621,22 @@ export const useWorkspace = defineStore("workspace", () => {
         checkHandleCached,
         loadWorkspace,
         saveWorkspace,
+        reloadFiles,
+        acknowledgeExternalChange,
+        summarizeUnsavedChanges,
         runningInElectron,
     }
 })
+
+/**
+ * Stable JSON form of a tierlist entry, used to detect modifications.
+ * Function-valued fields (faults, faults_0) are dropped by JSON.stringify; Date
+ * fields serialize consistently to ISO strings, which is fine for equality checks.
+ */
+function stringifyEntries(entry: TierlistEntry | undefined): string {
+    if (!entry) return '';
+    return JSON.stringify(entry);
+}
 
 
 function addMetrics(a: number, b: number) {

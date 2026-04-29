@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 
 import { useContextMenu, useFileExporter, useWorkspace } from '../store';
 
@@ -8,6 +8,7 @@ import ChooseWorkspace from './ChooseWorkspace.vue'
 import ChooseTierlist from './ChooseTierlist.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import ToastContainer from '../components/ToastContainer.vue'
+import ExternalChangesModal from '../components/ExternalChangesModal.vue'
 
 
 const enum Mode {
@@ -22,6 +23,43 @@ const fileexporter = useFileExporter();
 
 // Start in loading mode so we can auto-load workspace (Electron or browser cache)
 const mode = ref<Mode>(Mode.LOADING);
+
+// External-change popup: filenames that the main process reported as modified
+// outside this app while the window was unfocused.
+const externalChangedFiles = ref<string[]>([]);
+let unsubscribeExternalChange: (() => void) | null = null;
+
+function mergeChangedFiles(filenames: string[]) {
+    if (filenames.length === 0) return;
+    // Only surface tierlist files — settings.json / pokemon.json aren't relevant
+    // to the scheduler-sync workflow and would just confuse the user.
+    const tierlistNames = new Set(workspace.tierlists.map(t => t.filename));
+    const relevant = filenames.filter(f => tierlistNames.has(f));
+    if (relevant.length === 0) return;
+    const merged = new Set([...externalChangedFiles.value, ...relevant]);
+    externalChangedFiles.value = Array.from(merged);
+}
+
+function dismissExternalChanges() {
+    externalChangedFiles.value = [];
+}
+
+onMounted(() => {
+    console.log('[watch] electronWatch available:', !!window.electronWatch);
+    if (window.electronWatch) {
+        unsubscribeExternalChange = window.electronWatch.onExternalChange((filenames) => {
+            console.log('[watch] received externalChange in renderer:', filenames);
+            mergeChangedFiles(filenames);
+        });
+    }
+});
+
+onBeforeUnmount(() => {
+    if (unsubscribeExternalChange) {
+        unsubscribeExternalChange();
+        unsubscribeExternalChange = null;
+    }
+});
 
 // Auto-load workspace on launch: Electron uses userData path; browser uses cached handle if available
 onMounted(async () => {
@@ -124,6 +162,11 @@ function handler(e: MouseEvent) {
         <KeepAlive>
             <ToastContainer />
         </KeepAlive>
+        <ExternalChangesModal
+            v-if="externalChangedFiles.length > 0"
+            :filenames="externalChangedFiles"
+            @close="dismissExternalChanges"
+        />
     </Teleport>
 </template>
 

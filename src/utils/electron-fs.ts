@@ -24,6 +24,11 @@ declare global {
       getAvailableVersion: () => Promise<string | null>
       install: () => Promise<void>
     }
+    electronWatch?: {
+      onExternalChange: (callback: (filenames: string[]) => void) => () => void
+      acknowledgeChange: (filename: string) => Promise<void>
+      checkNow: () => Promise<string[]>
+    }
     electronVideo?: {
       createTempDir: () => Promise<string>
       saveFrame: (tmpDir: string, frameIndex: number, dataUrl: string) => Promise<void>
