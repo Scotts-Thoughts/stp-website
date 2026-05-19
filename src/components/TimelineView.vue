@@ -4,7 +4,7 @@ import { onKeyDown } from '@vueuse/core';
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import CameraAutomateWindow from './CameraAutomateWindow.vue';
-import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, RerankPhase, METRIC } from '../store';
+import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, useToast, RerankPhase, METRIC } from '../store';
 import { hasAlternativeMoveType } from '../utils/pokemon';
 import * as htmlToImage from 'html-to-image';
 
@@ -13,6 +13,7 @@ const fileexporter = useFileExporter();
 const globalStore = useGlobal();
 const reranking = useReranking();
 const workspace = useWorkspace();
+const toast = useToast();
 
 // Tier colors (solid midpoint colors from the gradients)
 const TIER_COLORS = [
@@ -1318,6 +1319,29 @@ function setupContextMenu() {
             shortcut: 'N',
             action() {
                 emit('close');
+            },
+        },
+        {
+            label: 'Export as PNG',
+            shortcut: 'Ctrl+E',
+            action() {
+                if (!containerRef.value) return;
+                let startToastId = -1;
+                fileexporter.exportElement(containerRef.value, 1, (message, state) => {
+                    switch (state) {
+                        case 'start':
+                            startToastId = toast.addToast(message, 'info', { timeout: -1, pending: true });
+                            break;
+                        case 'success':
+                            toast.removeToast(startToastId);
+                            toast.addToast(message, 'success');
+                            break;
+                        case 'error':
+                            toast.removeToast(startToastId);
+                            toast.addToast(message, 'error');
+                            break;
+                    }
+                });
             },
         },
         {
