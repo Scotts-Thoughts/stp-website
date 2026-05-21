@@ -102,8 +102,14 @@ export const useTierlist = defineStore("tierlist", () => {
     });
 
     watch(() => activeMetric.value, () => {
-        activeThresholdIndex.value = 0;
+        resolveDefaultThresholdIndex();
     });
+
+    // Re-resolve the active threshold whenever the per-view defaults change
+    // (e.g. the Thresholds dialog assigns a group to a view) so the live view updates immediately.
+    watch(() => workspace.activeTierlist.thresholdDefaults, () => {
+        resolveDefaultThresholdIndex();
+    }, { deep: true });
 
 
     const filterByType = (pokemonName: string) => {

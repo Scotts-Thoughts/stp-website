@@ -863,9 +863,11 @@ function generateTierlist(name: string, game?: string): Tierlist {
         name,
         game: gameName,
         total: [0],
-        thresholds_first: DEFAULT_THRESHOLDS_PARSED,
-        thresholds_best: DEFAULT_THRESHOLDS_PARSED,
-        thresholds_recent: DEFAULT_THRESHOLDS_PARSED,
+        // Clone per view so the three arrays are independent objects (and don't share the
+        // module-level constant across tierlists) — otherwise editing one would mutate all.
+        thresholds_first: structuredClone(DEFAULT_THRESHOLDS_PARSED),
+        thresholds_best: structuredClone(DEFAULT_THRESHOLDS_PARSED),
+        thresholds_recent: structuredClone(DEFAULT_THRESHOLDS_PARSED),
         entries: {},
         platform: config?.platform,
         cartridgeImage: config?.cartridgeImage,

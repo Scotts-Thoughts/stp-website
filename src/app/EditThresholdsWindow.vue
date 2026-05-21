@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Window from '../components/Window.vue'
 import { METRIC, METRIC_TIME_KEYS, type MetricKeys, useWorkspace } from '../store';
 import { formatTimeHMS } from '../utils/time';
@@ -8,7 +8,7 @@ import { formatTimeHMS } from '../utils/time';
 // Component Props & Emits
 // ============================================================================
 
-defineProps<{
+const props = defineProps<{
     visible: boolean
 }>();
 
@@ -100,15 +100,14 @@ function getThresholdsObj(view: ViewKey) {
     return tl.thresholds_recent;
 }
 
-/** Gets the threshold array for the current metric in the given view. */
-function getArr(view: ViewKey): { label: string; data: number[] }[] {
-    return getThresholdsObj(view)[selectedMetric.value] ?? [];
+/** Gets the threshold array for the given metric (defaults to the selected one) in the given view. */
+function getArr(view: ViewKey, metric: MetricKeys = selectedMetric.value): { label: string; data: number[] }[] {
+    return getThresholdsObj(view)[metric] ?? [];
 }
 
-/** Sets the threshold array for the current metric in the given view (immutable spread for reactivity). */
-function setArr(view: ViewKey, arr: { label: string; data: number[] }[]) {
+/** Sets the threshold array for the given metric (defaults to the selected one) in the given view (immutable spread for reactivity). */
+function setArr(view: ViewKey, arr: { label: string; data: number[] }[], metric: MetricKeys = selectedMetric.value) {
     const tl = workspace.activeTierlist;
-    const metric = selectedMetric.value;
     if (view === 'first') {
         tl.thresholds_first = { ...tl.thresholds_first, [metric]: arr };
     } else if (view === 'best') {
@@ -121,6 +120,42 @@ function setArr(view: ViewKey, arr: { label: string; data: number[] }[]) {
 
 function isTimeMetric(metric: string): boolean {
     return (METRIC_TIME_KEYS as readonly string[]).includes(metric);
+}
+
+/**
+ * Ensures all three views contain every threshold group label for the given metric,
+ * adding any missing ones by copying data from a view that already has it.
+ *
+ * This is non-destructive: an existing per-view entry is never modified, only missing
+ * labels are appended. Keeping the label sets identical across views is what guarantees
+ * every group defined here is selectable in the Filter dialog's dropdown, regardless of
+ * which view (First/Followup/Best) is currently active.
+ */
+function syncViewGroups(metric: MetricKeys) {
+    const order: string[] = [];
+    const dataByLabel = new Map<string, number[]>();
+    for (const view of ALL_VIEWS) {
+        for (const set of getArr(view, metric)) {
+            if (!dataByLabel.has(set.label)) {
+                dataByLabel.set(set.label, set.data);
+                order.push(set.label);
+            }
+        }
+    }
+    if (order.length === 0) return;
+    for (const view of ALL_VIEWS) {
+        const arr = getArr(view, metric);
+        const have = new Set(arr.map(s => s.label));
+        const missing = order.filter(l => !have.has(l));
+        if (missing.length === 0) continue;
+        const added = missing.map(l => ({ label: l, data: [...(dataByLabel.get(l) ?? Array(8).fill(0))] }));
+        setArr(view, [...arr, ...added], metric);
+    }
+}
+
+/** Completes the group lists across views for every editable metric (used when the dialog opens). */
+function syncAllMetrics() {
+    for (const m of VISIBLE_METRICS) syncViewGroups(m);
 }
 
 // ============================================================================
@@ -169,14 +204,11 @@ function assignToView(idx: number, view: ViewKey) {
     if (!set) return;
     const metric = selectedMetric.value;
 
-    // Ensure this group exists in the view's array
-    const arr = [...getArr(view)];
-    if (!arr.some(s => s.label === set.label)) {
-        arr.push({ label: set.label, data: [...set.data] });
-        setArr(view, arr);
-    }
+    // Make sure every view carries this group so it stays selectable in the Filter dropdown.
+    syncViewGroups(metric);
 
-    // Store as the default for this view + metric
+    // Store as the default for this view + metric. The tierlist store watches
+    // thresholdDefaults and re-resolves the active threshold, so the live view updates immediately.
     const defaults = ensureDefaults();
     if (!defaults[view]) defaults[view] = {};
     defaults[view]![metric] = set.label;
@@ -207,10 +239,16 @@ let advancing = false;
 function startCellEdit(idx: number, tierIdx: number) {
     editingCell.value = { idx, tierIdx };
     digits.value = [];
-    numberInput.value = '';
+    // Time cells use digit-entry (start blank). Numeric cells prefill the current value
+    // so it's visible/editable and tabbing past a cell doesn't blank it to 0.
+    const set = allSets.value[idx];
+    numberInput.value = isTimeMetric(selectedMetric.value) ? '' : String(set?.data[tierIdx] ?? '');
     nextTick(() => {
         const input = document.querySelector('.cell-input') as HTMLInputElement;
-        if (input) input.focus();
+        if (input) {
+            input.focus();
+            if (!isTimeMetric(selectedMetric.value)) input.select();
+        }
     });
 }
 
@@ -240,6 +278,7 @@ function saveCellEdit(): { idx: number; tierIdx: number } | null {
         if (digits.value.length === 0) { cancelCellEdit(); return null; }
         newValue = digitsToMs();
     } else {
+        if (numberInput.value.trim() === '') { cancelCellEdit(); return null; }
         const n = Number(numberInput.value);
         if (isNaN(n) || n < 0) { cancelCellEdit(); return null; }
         newValue = n;
@@ -445,6 +484,29 @@ function formatValue(v: number): string {
     if (isTimeMetric(selectedMetric.value)) return formatTimeHMS(v, false);
     return String(v);
 }
+
+// ============================================================================
+// View synchronization
+// ============================================================================
+
+// When the dialog opens, complete every view's group list so each set is available
+// in the Filter dropdown regardless of which view (First/Followup/Best) is active.
+watch(() => props.visible, (visible) => {
+    if (!visible) return;
+    cancelCellEdit();
+    editingLabelIdx.value = null;
+    syncAllMetrics();
+    bump();
+});
+
+// Switching metrics inside the dialog: drop any in-progress edit and complete the new
+// metric's group list across views.
+watch(selectedMetric, (metric) => {
+    cancelCellEdit();
+    editingLabelIdx.value = null;
+    syncViewGroups(metric);
+    bump();
+});
 </script>
 
 
