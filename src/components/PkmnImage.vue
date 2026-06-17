@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useGlobal, useWorkspace, useTierlist } from '../store';
 import { getPokemonPokedexId } from '../utils/pokemon/pokedex';
-import { getBaseSpeciesName, getFormNameForFile, getAlternativeMoveType, removeAlternativeMoveType } from '../utils/pokemon';
+import { getBaseSpeciesName, getFormNameForFile, getAlternativeMoveType, removeAlternativeMoveType, sanitizePokemonFileName, HYPHENATED_SPECIES } from '../utils/pokemon';
 
 const props = withDefaults(defineProps<{
     pokemon: string,
@@ -53,9 +53,10 @@ const imagePath = computed(() => {
         // Convert all spaces to dashes for file naming: "Alolan Marowak" -> "Alolan-Marowak"
         // Also handles "Paldean Tauros (Combat Breed)" -> "Paldean-Tauros-(Combat-Breed)"
         pokemonName = pokemonName.replace(/\s+/g, '-');
-    } else {
+    } else if (!HYPHENATED_SPECIES.has(pokemonName)) {
         // Handle regular dash-separated forms (e.g., "Deoxys-Attack")
-        // But exclude alternative move type suffixes which we already removed
+        // But exclude alternative move type suffixes which we already removed,
+        // and species whose name legitimately contains a hyphen (e.g. "Chi-Yu")
         const dashIndex = pokemonName.indexOf('-');
         if (dashIndex !== -1) {
             const baseName = pokemonName.substring(0, dashIndex);
@@ -65,6 +66,11 @@ const imagePath = computed(() => {
         }
     }
     
+    // Normalize characters that can't appear in / don't match the on-disk filenames
+    // (accents like "Flabébé" -> "Flabebe", "Type: Null" -> "Type_Null").
+    // Keep the un-sanitized name for the Pokedex ID lookup, which expects the real species name.
+    const fileName = sanitizePokemonFileName(pokemonName);
+
     if (imageSource) {
         if (imageSource === 'yellow-sprites') {
             const pokedexId = getPokemonPokedexId(tierlist.activeTierlist.game, pokemonName);
@@ -72,11 +78,11 @@ const imagePath = computed(() => {
                 return `./images/${imageSource}/${pokedexId}.png`;
             }
             // Fallback to pokemon name if Pokedex ID not found
-            return `./images/${imageSource}/${pokemonName}.png`;
+            return `./images/${imageSource}/${fileName}.png`;
         }
-        return `./images/${imageSource}/${pokemonName}.png`;
+        return `./images/${imageSource}/${fileName}.png`;
     }
-    return `./images/pokemon_thumbnail/${pokemonName}.png`;
+    return `./images/pokemon_thumbnail/${fileName}.png`;
 });
 
 function onImageError() {

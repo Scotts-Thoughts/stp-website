@@ -1112,6 +1112,23 @@ export const pokemonNames = [
 ];
 
 /**
+ * Species whose names legitimately contain a hyphen (it is part of the name, not a
+ * form separator). These must never be split into "base-form" when resolving image
+ * files — e.g. "Chi-Yu" must stay "Chi-Yu.png", not become "Chi-yu.png" (which breaks
+ * on case-sensitive filesystems like the deployed web server).
+ */
+export const HYPHENATED_SPECIES = new Set([
+    'Chi-Yu',
+    'Chien-Pao',
+    'Hakamo-o',
+    'Ho-oh',
+    'Jangmo-o',
+    'Kommo-o',
+    'Ting-Lu',
+    'Wo-Chien',
+]);
+
+/**
  * Extracts the base species name from a Pokemon name that may include a form.
  * Examples:
  * - "Deoxys-Attack" -> "Deoxys"
@@ -1121,6 +1138,11 @@ export const pokemonNames = [
  * - "Pikachu" -> "Pikachu" (no form)
  */
 export function getBaseSpeciesName(pokemonName: string): string {
+    // Species with a hyphen as part of their name (not a form) are returned as-is
+    if (HYPHENATED_SPECIES.has(pokemonName)) {
+        return pokemonName;
+    }
+
     // Handle dash-separated forms (e.g., "Deoxys-Attack", "Greninja-Ask")
     const dashIndex = pokemonName.indexOf('-');
     if (dashIndex !== -1) {
@@ -1181,6 +1203,23 @@ export function getFormNameForFile(formName: string): string {
     return formName
         .replace(/\s+/g, '-')  // Replace spaces with dashes
         .toLowerCase();
+}
+
+/**
+ * Normalizes a Pokemon name for use in an image filename by removing characters
+ * that can't appear in (or don't match) the on-disk file names:
+ * - Strips diacritics so "Flabébé" matches "Flabebe.png"
+ * - Collapses a colon + following whitespace into an underscore so
+ *   "Type: Null" matches "Type_Null.png" (":" is an illegal filename char on Windows)
+ *
+ * Note: spaces are intentionally left alone — most multi-word names use spaces in
+ * their filenames (e.g. "Iron Hands.png", "Flutter Mane.png").
+ */
+export function sanitizePokemonFileName(name: string): string {
+    return name
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')  // strip diacritics (é -> e)
+        .replace(/:\s*/g, '_');          // "Type: Null" -> "Type_Null"
 }
 
 /**
