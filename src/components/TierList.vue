@@ -2,11 +2,18 @@
 import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
-import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu } from '../store';
+import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu, type ContextMenuOptionArg } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
+import { recordScrollAnimation } from '../utils/video-recorder';
 
 const emit = defineEmits<{
     restoreContextMenu: []
+}>();
+
+// The main tierlist context-menu options, passed down so the per-tier right-click menu
+// can show them alongside the scroll-animation options instead of replacing them.
+const props = defineProps<{
+    contextMenuOptions: ContextMenuOptionArg[]
 }>();
 
 const enum TierlistTierIndex {
@@ -41,6 +48,17 @@ const tierScrollState = reactive<Record<number, {
 
 // Store refs to tier row elements
 const tierRowRefs = ref<Map<number, HTMLElement>>(new Map());
+
+// Scroll-animation export: captured scroll positions of one tier (state 1 → state 2)
+const scrollAnim = ref<{ tierIndex: number; state1: number | null; state2: number | null }>({
+    tierIndex: -1,
+    state1: null,
+    state2: null,
+});
+
+// True while a scroll video is being captured — suppresses mouse hover effects (via the
+// PkmnImage `no-hover` class) so a hovered Pokemon doesn't bleed into the recorded frames.
+const captureActive = ref(false);
 
 // Store observers for cleanup
 const resizeObservers = new Map<number, ResizeObserver>();
@@ -553,6 +571,122 @@ function handleThresholdContextMenu(event: MouseEvent) {
     contextMenu.show(event.clientX, event.clientY);
 }
 
+// Right-click on a tier row: scroll-animation export menu (set state 1/2, export, clear).
+function handleTierRowContextMenu(event: MouseEvent, tierIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const restoreMenu = () => emit('restoreContextMenu');
+    const sameTier = scrollAnim.value.tierIndex === tierIndex;
+    const hasState1 = sameTier && scrollAnim.value.state1 !== null;
+    const hasState2 = sameTier && scrollAnim.value.state2 !== null;
+
+    const scrollOptions = [
+        {
+            label: hasState1 ? 'Set Scroll State 1 ✓' : 'Set Scroll State 1',
+            action() {
+                restoreMenu();
+                const el = tierRowRefs.value.get(tierIndex);
+                if (!el) return;
+                scrollAnim.value = { tierIndex, state1: el.scrollLeft, state2: null };
+                toast.addToast('Scroll state 1 set', 'info', { timeout: 2000 });
+            },
+        },
+        {
+            label: hasState2 ? 'Set Scroll State 2 ✓' : 'Set Scroll State 2',
+            hidden: !hasState1,
+            action() {
+                restoreMenu();
+                const el = tierRowRefs.value.get(tierIndex);
+                if (!el) return;
+                scrollAnim.value = { ...scrollAnim.value, state2: el.scrollLeft };
+                toast.addToast('Scroll state 2 set', 'info', { timeout: 2000 });
+            },
+        },
+        {
+            label: 'Export Scroll Video + PNGs',
+            hidden: !(hasState1 && hasState2),
+            action() {
+                restoreMenu();
+                exportScrollVideo();
+            },
+        },
+        {
+            label: '', // separator
+            hidden: !hasState1,
+        },
+        {
+            label: 'Clear Scroll States',
+            hidden: !hasState1,
+            action() {
+                restoreMenu();
+                scrollAnim.value = { tierIndex: -1, state1: null, state2: null };
+                toast.addToast('Scroll states cleared', 'info', { timeout: 1500 });
+            },
+        },
+    ];
+
+    // Show the full main menu plus a separator and the scroll-animation options for this tier.
+    contextMenu.setOptions([...props.contextMenuOptions, { label: '' }, ...scrollOptions]);
+    contextMenu.show(event.clientX, event.clientY);
+}
+
+// Record the chosen tier scrolling from state 1 → state 2 as a transparent .mov,
+// plus a PNG of each endpoint state (saved next to the chosen .mov).
+async function exportScrollVideo() {
+    if (!window.electronVideo) {
+        toast.addToast('Video export requires the desktop app', 'error');
+        return;
+    }
+    const { tierIndex, state1, state2 } = scrollAnim.value;
+    if (state1 === null || state2 === null) {
+        toast.addToast('Set both scroll states first', 'warning', { timeout: 2000 });
+        return;
+    }
+    const scrollEl = tierRowRefs.value.get(tierIndex);
+    if (!scrollEl) {
+        toast.addToast('Tier row not found', 'error');
+        return;
+    }
+    const wrapperEl = scrollEl.closest('.wrapper') as HTMLElement | null;
+    if (!wrapperEl) {
+        toast.addToast('Tierlist wrapper not found', 'error');
+        return;
+    }
+
+    let toastId = toast.addToast('Preparing scroll video...', 'info', { timeout: -1, pending: true });
+
+    // Suppress hover effects for the duration of the capture, and let Vue apply the
+    // `no-hover` class before the first frame is grabbed.
+    captureActive.value = true;
+    await nextTick();
+
+    try {
+        await recordScrollAnimation({
+            wrapperEl,
+            scrollEl,
+            fromScroll: state1,
+            toScroll: state2,
+            pngBaseName: 'scroll',
+            async saveStatePng(folder, filename, dataUrl) {
+                await window.electronDialog?.saveFile(folder, filename, dataUrl);
+            },
+            onProgress(p) {
+                toast.removeToast(toastId);
+                if (p.phase === 'capturing' || p.phase === 'encoding') {
+                    toastId = toast.addToast(p.message, 'info', { timeout: -1, pending: true });
+                } else if (p.phase === 'done') {
+                    toast.addToast(p.message, 'success');
+                } else if (p.phase === 'error') {
+                    toast.addToast(p.message, 'error');
+                }
+            },
+        });
+    } finally {
+        captureActive.value = false;
+    }
+}
+
 // Tier image change (Surge = index 7, Bruno = index 8)
 function handleTierImageClick(event: MouseEvent, tierIndex: number) {
     event.stopPropagation();
@@ -980,6 +1114,7 @@ function sleep(ms: number): Promise<void> {
                     'exporting': fileexporter.exportInProgress
                 }"
                 @wheel="handleWheel($event, i)"
+                @contextmenu.prevent.stop="handleTierRowContextMenu($event, i)"
             >
                 <div 
                     :class="'entry-row gray-grad rounded tier-' + i" 
@@ -991,7 +1126,7 @@ function sleep(ms: number): Promise<void> {
                         :pokemon="entry.pkmnName"
                         :neighbor="entry.prev"
                         :active="true"
-                        :no-hover="fileexporter.exportInProgress"
+                        :no-hover="fileexporter.exportInProgress || captureActive"
                         :class="getRerankClass(entry.pkmnName)"
                         @click.stop="
                             if (!$event.ctrlKey) {
@@ -1263,6 +1398,11 @@ function sleep(ms: number): Promise<void> {
     display: none !important;
 }
 
+/* Hide ONLY the scrollbar during scroll-video capture (keep the edge fades visible) */
+.entry-row-wrapper.scroll-capturing .scroll-track {
+    display: none !important;
+}
+
 .entry-row-wrapper:not(.exporting) .scroll-thumb {
     position: absolute;
     top: 0;
@@ -1316,9 +1456,9 @@ function sleep(ms: number): Promise<void> {
     border-radius: 0 11px 11px 0;
 }
 
-/* Hide fade overlays during export */
-.entry-row-wrapper.exporting .fade-left,
-.entry-row-wrapper.exporting .fade-right {
+/* Hide the left scroll-edge fade during export, but keep the right fade so
+   Pokemon that get close to / under the threshold labels still fade out. */
+.entry-row-wrapper.exporting .fade-left {
     display: none;
 }
 

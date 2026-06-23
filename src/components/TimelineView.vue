@@ -4,7 +4,7 @@ import { onKeyDown } from '@vueuse/core';
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import CameraAutomateWindow from './CameraAutomateWindow.vue';
-import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, useToast, RerankPhase, METRIC } from '../store';
+import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, useToast, RerankPhase, METRIC, CreditMode } from '../store';
 import { hasAlternativeMoveType } from '../utils/pokemon';
 import * as htmlToImage from 'html-to-image';
 
@@ -35,9 +35,31 @@ const PADDING_RIGHT = 40;
 const AXIS_Y = 540;
 const MAX_SPRITE_SIZE = 69;
 const MIN_SPRITE_SIZE = 28;
-const TIMELINE_WIDTH = 1920 - PADDING_LEFT - PADDING_RIGHT;
 const ABOVE_MIN_Y = 90;
 const BELOW_MAX_Y = 1000;
+const TIMELINE_WIDTH = 1920 - PADDING_LEFT - PADDING_RIGHT;
+
+// The credits overlay occupies the bottom-right corner. Entries whose x falls
+// within this horizontal band are forced above the axis so they don't render
+// behind the credits (the timeline itself still spans the full width). Widths
+// match the credits-column widths used by the TierList view; Infinity = off.
+const creditLeftX = computed(() => {
+    switch (globalStore.creditMode) {
+        case CreditMode.SMALL: return 1920 - 10 - 531;
+        case CreditMode.BIG: return 1920 - 10 - 715;
+        default: return Infinity;
+    }
+});
+
+// Top y of the credits overlay (matches the TierList grid rows the credits span).
+// Threshold value labels within the credits band are lifted above this line.
+const creditTopY = computed(() => {
+    switch (globalStore.creditMode) {
+        case CreditMode.SMALL: return 759; // grid row 8
+        case CreditMode.BIG: return 652;   // grid row 7
+        default: return Infinity;
+    }
+});
 
 // Zoom & pan state
 const viewMin = ref<number | null>(null); // null = show full range
@@ -205,7 +227,12 @@ watch(targetSpriteSize, (target) => {
         spriteSize.value = target;
         return;
     }
-    // During playback/recording, snap immediately to eliminate lag
+    // During recording, sprite size is driven manually (smoothed) in the capture loop.
+    if (_inRecording) {
+        if (spriteSizeFrameId) { cancelAnimationFrame(spriteSizeFrameId); spriteSizeFrameId = null; }
+        return;
+    }
+    // During playback, snap immediately to eliminate lag
     if (_inPlayback) {
         spriteSize.value = target;
         if (spriteSizeFrameId) { cancelAnimationFrame(spriteSizeFrameId); spriteSizeFrameId = null; }
@@ -239,18 +266,31 @@ const timelineView = computed(() => {
     const metricKey = tierlist.activeMetric;
     const labelFormatter = METRIC[metricKey].formatLabel ?? ((x: number) => x.toString());
 
-    const thresholdPositions: { pct: number; value: number; label: string; tierIndex: number; color: string; tierName: string }[] = [];
+    // The threshold-line container's bottom edge sits at this screen y (matches the
+    // .threshold-line bottom inset in CSS).
+    const LINE_BOTTOM_Y = 1080 - 35;
+    const thresholdPositions: { pct: number; value: number; label: string; tierIndex: number; color: string; tierName: string; valueBottom: number }[] = [];
     for (let i = 0; i < 8; i++) {
         const tVal = threshold[i];
         const pct = ((tVal - min) / range) * 100;
         if (pct >= -10 && pct <= 110) {
+            // Lift the value label above the credits overlay while any part of its text
+            // overlaps the credits column — the label is centered on threshX, so it stays
+            // lifted until the whole text has cleared the credits' left edge (then it
+            // slides back down). Width is estimated from the text (16px Play-Bold ≈ 9px/char).
+            const threshX = PADDING_LEFT + (pct / 100) * TIMELINE_WIDTH;
+            const label = labelFormatter(tVal);
+            const labelHalfWidth = (label.length * 9) / 2;
+            const overlapsCredits = threshX + labelHalfWidth >= creditLeftX.value;
+            const valueBottom = overlapsCredits ? Math.max(0, LINE_BOTTOM_Y - creditTopY.value + 10) : 0;
             thresholdPositions.push({
                 pct,
                 value: tVal,
-                label: labelFormatter(tVal),
+                label,
                 tierIndex: i,
                 color: TIER_COLORS[i],
                 tierName: tierData.value[i]?.name ?? '',
+                valueBottom,
             });
         }
     }
@@ -410,6 +450,16 @@ const baseLayout = computed(() => {
 // During re-ranking, pin the animating Pokemon to its original side of the axis
 const rerankSideOverride = ref<Map<string, 'above' | 'below'>>(new Map());
 
+// Connector-line geometry for a sprite at vertical position `topY` with size `ss`.
+function connectorGeom(topY: number, ss: number): { lineTop: number; lineHeight: number } {
+    const spriteCenter = topY + ss / 2;
+    if (spriteCenter < AXIS_Y) {
+        const lineTop = topY + ss;
+        return { lineTop, lineHeight: AXIS_Y - lineTop };
+    }
+    return { lineTop: AXIS_Y, lineHeight: topY - AXIS_Y };
+}
+
 // Positioned entries within the visible range — uses stable above/below from baseLayout
 const positionedEntries = computed(() => {
     const { entries, extremeOutliers } = baseTimelineData.value;
@@ -423,25 +473,34 @@ const positionedEntries = computed(() => {
         ? new Map([...baseSideMap, ...overrides])
         : baseSideMap;
     const ss = spriteSize.value;
-    const minXDist = ss + 4;
     const rowHeight = ss + 8;
     const range = max - min || 1;
 
-    // Calculate X positions — include entries slightly outside view so they're visible at edges
+    // Each entry carries a horizontal collision footprint: a center `cx` and half-width
+    // `chw`. Regular entries are just the sprite; extreme-outlier bubbles also include the
+    // value-text pill (see below), so neighbours collide with the whole UI, not only the art.
     const includeMargin = range * 0.08;
     const withX = entries
         .filter(e => e.value >= min - includeMargin && e.value <= max + includeMargin)
         .map(entry => {
             const xPct = ((entry.value - min) / range) * 100;
             const xPx = PADDING_LEFT + (xPct / 100) * TIMELINE_WIDTH;
-            return { ...entry, xPx, yPx: 0, lineTop: 0, lineHeight: 0, isExtremeOutlier: false, popoutAbove: false };
+            return { ...entry, xPx, cx: xPx, chw: ss / 2, yPx: 0, lineTop: 0, lineHeight: 0, isExtremeOutlier: false, popoutAbove: false };
         });
 
-    // Add extreme outliers clamped to the right edge (always visible)
+    // Add extreme outliers clamped to the right edge (always visible). They render as a pill
+    // (sprite + value text) anchored at `right: 20px` — see .outlier-bubble CSS — so the
+    // collision footprint spans the whole pill: 1px border + 2/10px padding + 6px gap + the
+    // value text (~8px/char at 13px Play-Bold). Using the full width keeps neighbouring
+    // sprites from sliding under the time label.
+    const OUTLIER_RIGHT_EDGE = 1920 - 20;
     for (const outlier of extremeOutliers) {
+        const bubbleWidth = ss + 20 + outlier.formattedValue.length * 8;
         withX.push({
             ...outlier,
             xPx: PADDING_LEFT + TIMELINE_WIDTH,
+            cx: OUTLIER_RIGHT_EDGE - bubbleWidth / 2,
+            chw: bubbleWidth / 2,
             yPx: 0, lineTop: 0, lineHeight: 0,
             isExtremeOutlier: true,
             popoutAbove: false,
@@ -453,59 +512,71 @@ const positionedEntries = computed(() => {
     const maxAboveRows = Math.floor((AXIS_Y - GAP_FROM_AXIS - ABOVE_MIN_Y) / rowHeight);
     const maxBelowRows = Math.floor((BELOW_MAX_Y - AXIS_Y - GAP_FROM_AXIS) / rowHeight);
 
-    const aboveRows: { xPx: number }[][] = [];
-    const belowRows: { xPx: number }[][] = [];
+    type RowItem = { cx: number; chw: number };
+    const aboveRows: RowItem[][] = [];
+    const belowRows: RowItem[][] = [];
 
-    for (const entry of withX) {
-        const side = sideMap.get(entry.pkmnName) ?? 'above';
-        let placed = false;
+    const creditX = creditLeftX.value;
+    const COLLISION_GAP = 4; // minimum clear space between two footprints in the same row
 
-        const maxRows = side === 'above' ? maxAboveRows : maxBelowRows;
-        const rows = side === 'above' ? aboveRows : belowRows;
-
-        for (let rowLevel = 0; rowLevel < maxRows && !placed; rowLevel++) {
-            if (side === 'above') {
-                entry.yPx = AXIS_Y - GAP_FROM_AXIS - ss - rowLevel * rowHeight;
-            } else {
-                entry.yPx = AXIS_Y + GAP_FROM_AXIS + rowLevel * rowHeight;
-            }
-
+    // Place a footprint (center `cx`, half-width `chw`) into the first row of a side whose
+    // existing footprints it doesn't overlap, creating a new row if needed. Returns the row
+    // level, or -1 if the side is full (every row up to `maxRows` already overlaps it).
+    const placeInSide = (rows: RowItem[][], maxRows: number, item: RowItem): number => {
+        for (let rowLevel = 0; rowLevel < maxRows; rowLevel++) {
             if (rowLevel < rows.length) {
-                const row = rows[rowLevel];
-                if (!row.some(e => Math.abs(e.xPx - entry.xPx) < minXDist)) {
-                    row.push({ xPx: entry.xPx });
-                    placed = true;
+                if (!rows[rowLevel].some(e => Math.abs(e.cx - item.cx) < e.chw + item.chw + COLLISION_GAP)) {
+                    rows[rowLevel].push(item);
+                    return rowLevel;
                 }
             } else {
-                rows.push([{ xPx: entry.xPx }]);
-                placed = true;
+                rows.push([item]);
+                return rowLevel;
             }
+        }
+        return -1;
+    };
+
+    const yForRow = (above: boolean, rowLevel: number): number =>
+        above
+            ? AXIS_Y - GAP_FROM_AXIS - ss - rowLevel * rowHeight
+            : AXIS_Y + GAP_FROM_AXIS + rowLevel * rowHeight;
+
+    for (const entry of withX) {
+        // Credits occupy the bottom-right corner: force entries in that horizontal
+        // band above the axis so they dodge the credits overlay.
+        const preferAbove = entry.xPx >= creditX || (sideMap.get(entry.pkmnName) ?? 'above') === 'above';
+
+        const footprint = { cx: entry.cx, chw: entry.chw };
+
+        // 1) Try the entry's preferred side.
+        let above = preferAbove;
+        let rowLevel = placeInSide(above ? aboveRows : belowRows, above ? maxAboveRows : maxBelowRows, footprint);
+
+        // 2) Preferred side is full — spill to the other side rather than overlapping.
+        //    computeSpriteSize sizes sprites so the densest cluster fits in above+below rows
+        //    combined, so the other side is guaranteed to have a free row here.
+        if (rowLevel === -1) {
+            above = !preferAbove;
+            rowLevel = placeInSide(above ? aboveRows : belowRows, above ? maxAboveRows : maxBelowRows, footprint);
         }
 
-        // If still not placed, force into the last valid row
-        if (!placed) {
-            const lastRow = maxRows - 1;
-            if (side === 'above') {
-                entry.yPx = AXIS_Y - GAP_FROM_AXIS - ss - lastRow * rowHeight;
-            } else {
-                entry.yPx = AXIS_Y + GAP_FROM_AXIS + lastRow * rowHeight;
-            }
-            if (rows.length > lastRow) {
-                rows[lastRow].push({ xPx: entry.xPx });
-            } else {
-                rows.push([{ xPx: entry.xPx }]);
-            }
+        // 3) Both sides full (extreme density even at the minimum sprite size) — force into
+        //    the preferred side's last row as a last resort.
+        if (rowLevel === -1) {
+            above = preferAbove;
+            const rows = above ? aboveRows : belowRows;
+            rowLevel = Math.max(0, (above ? maxAboveRows : maxBelowRows) - 1);
+            if (rows.length > rowLevel) rows[rowLevel].push(footprint);
+            else rows.push([footprint]);
         }
+
+        entry.yPx = yForRow(above, rowLevel);
 
         // Connector line
-        const spriteCenter = entry.yPx + ss / 2;
-        if (spriteCenter < AXIS_Y) {
-            entry.lineTop = entry.yPx + ss;
-            entry.lineHeight = AXIS_Y - entry.lineTop;
-        } else {
-            entry.lineTop = AXIS_Y;
-            entry.lineHeight = entry.yPx - AXIS_Y;
-        }
+        const geom = connectorGeom(entry.yPx, ss);
+        entry.lineTop = geom.lineTop;
+        entry.lineHeight = geom.lineHeight;
     }
 
     // Determine popout direction with bounds checking
@@ -781,6 +852,24 @@ const isRecording = ref(false);
 const recordingProgress = ref({ current: 0, total: 0, message: '' });
 let recordingCancelled = false;
 
+// --- Deterministic motion smoothing during recording ---
+// In live playback, vertical sprite moves are smoothed by the CSS `transition: top`.
+// html-to-image samples that transition at wall-clock-variable progress (each frame
+// capture takes an unpredictable amount of real time), which makes the exported video
+// lurch instead of glide. During recording we instead smooth sprite Y + size ourselves,
+// frame-by-frame, and disable the CSS transitions (see `.recording-capture` styles).
+const recordSmoothY = ref<Map<string, number>>(new Map());
+// Smoothed opacity multiplier (0-1) for the threshold value labels while recording, so
+// they fade in/out as the crowding state changes instead of popping (the live CSS
+// transition is sampled at unpredictable progress during frame capture).
+const recordLabelOpacity = ref(1);
+// Smoothed credits-dodge offset (px) per threshold (keyed by tier index) while recording:
+// the label snaps up to clear the credits but eases back down once its text has cleared.
+const recordLabelBottom = ref<Map<number, number>>(new Map());
+let _inRecording = false;       // non-reactive: spriteSize is driven manually while recording
+let _recordSmoothInit = false;  // first smoothing frame snaps to target (no slide-in)
+const RECORD_SMOOTH = 0.15;     // per-frame lerp factor (~matches the live 0.55s ease)
+
 // --- Camera persistence ---
 const hasElectronVideo = !!window.electronVideo;
 const CAMERA_FILENAME = '_camera.json';
@@ -1024,10 +1113,20 @@ async function recordSequence() {
     const outputPath = await video.saveFileDialog('camera-sequence.mov');
     if (!outputPath) return;
 
+    // Derive the sibling folder + base name for the keyframe PNGs from the chosen .mov path.
+    const sep = outputPath.includes('\\') ? '\\' : '/';
+    const lastSep = outputPath.lastIndexOf(sep);
+    const folder = lastSep >= 0 ? outputPath.slice(0, lastSep) : '';
+    const fileBase = (lastSep >= 0 ? outputPath.slice(lastSep + 1) : outputPath).replace(/\.mov$/i, '');
+
     cameraWindowActive.value = false;
     isRecording.value = true;
     recordingCancelled = false;
     _inPlayback = true;
+    _inRecording = true;
+    _recordSmoothInit = false;
+    recordSmoothY.value = new Map();
+    if (spriteSizeFrameId) { cancelAnimationFrame(spriteSizeFrameId); spriteSizeFrameId = null; }
 
     const FPS = 60;
     const tmpDir = await video.createTempDir();
@@ -1061,6 +1160,11 @@ async function recordSequence() {
         cacheBust: false,
         pixelRatio: 1,
         skipFonts: true,
+        // Keep the on-screen recording / playback overlays out of the captured frames.
+        filter: (node: Node) => {
+            const cl = (node as HTMLElement).classList;
+            return !cl || !(cl.contains('recording-overlay') || cl.contains('playing-indicator') || cl.contains('countdown-overlay'));
+        },
         ...(fontEmbedCSS ? { fontEmbedCSS } : { skipFonts: false, preferredFontFormat: 'truetype' as const }),
     };
 
@@ -1075,6 +1179,31 @@ async function recordSequence() {
     const totalFrames = Math.ceil(totalDurationMs / 1000 * FPS);
 
     const { fullMin, fullMax } = baseTimelineData.value;
+
+    // Ordered, de-duplicated list of the snapshots used as keyframes in the sequence —
+    // each is also exported as a still PNG alongside the .mov.
+    const keyframeSnaps: CameraSnapshot[] = [];
+    const seenKeyframes = new Set<string>();
+    for (const step of sequence.value) {
+        if (step.type !== 'animate') continue;
+        for (const name of [step.startSnapshot, step.endSnapshot]) {
+            if (seenKeyframes.has(name)) continue;
+            const snap = snapshots.value.find(s => s.name === name);
+            if (snap) { seenKeyframes.add(name); keyframeSnaps.push(snap); }
+        }
+    }
+
+    // Apply a viewport for a capture frame. Set the exact eased values every frame — do NOT
+    // snap to the full-range (null) state when within ~1% of full, the way an interactive
+    // reset does. That early snap, combined with the ease-out deceleration, lands on the
+    // final view well before the clip ends and then holds, which reads as the animation
+    // "jumping" to the final frame and skipping its ease-out. Exact full-range values render
+    // identically to null (visibleRange falls back to fullMin/fullMax), so easing all the way
+    // in is both smooth and visually correct.
+    const applyViewport = (vMin: number, vMax: number) => {
+        viewMin.value = vMin;
+        viewMax.value = vMax;
+    };
 
     // Compute viewport at a given time in the sequence
     function getViewportAtTime(timeMs: number): { vMin: number; vMax: number } {
@@ -1124,6 +1253,31 @@ async function recordSequence() {
         const el = containerRef.value;
         if (!el) throw new Error('Container not found');
 
+        // --- Export each keyframe snapshot as a still PNG next to the .mov (best-effort) ---
+        try {
+            for (let k = 0; k < keyframeSnaps.length && !recordingCancelled; k++) {
+                const snap = keyframeSnaps[k];
+                recordingProgress.value = { current: k, total: keyframeSnaps.length, message: `Exporting keyframe ${k + 1}/${keyframeSnaps.length}` };
+
+                applyViewport(snap.viewMin ?? fullMin, snap.viewMax ?? fullMax);
+                await nextTick();
+                await nextTick();
+                // Snap the layout/labels to the resting state for this viewport (no slide trail).
+                _recordSmoothInit = false;
+                updateRecordSmoothing();
+                await nextTick();
+                await new Promise(r => requestAnimationFrame(r));
+
+                const dataUrl = await htmlToImage.toPng(el, captureOpts);
+                const safeName = snap.name.replace(/[^a-z0-9_-]+/gi, '_');
+                await window.electronDialog?.saveFile(folder, `${fileBase}-keyframe${k + 1}-${safeName}.png`, dataUrl);
+            }
+        } catch (e) {
+            console.warn('Failed to export keyframe PNG(s):', e);
+        }
+        // Re-arm the snap so the first animation frame also starts settled.
+        _recordSmoothInit = false;
+
         for (let frame = 0; frame <= totalFrames; frame++) {
             if (recordingCancelled) break;
 
@@ -1132,21 +1286,44 @@ async function recordSequence() {
 
             recordingProgress.value = { current: frame, total: totalFrames, message: `Capturing frame ${frame}/${totalFrames}` };
 
-            const fullRange = fullMax - fullMin;
-            if (Math.abs((vMax - vMin) - fullRange) < fullRange * 0.01) {
-                viewMin.value = null;
-                viewMax.value = null;
-            } else {
-                viewMin.value = vMin;
-                viewMax.value = vMax;
-            }
+            applyViewport(vMin, vMax);
 
             await nextTick();
+            await nextTick();
+            // Advance the deterministic Y/size smoothing for this frame, then let the
+            // template apply it before capturing.
+            updateRecordSmoothing();
             await nextTick();
             await new Promise(r => requestAnimationFrame(r));
 
             const dataUrl = await htmlToImage.toPng(el, captureOpts);
             await video.saveFrame(tmpDir, frame, dataUrl);
+        }
+
+        // --- Settle tail ---
+        // The camera viewport reaches the final snapshot exactly at the last frame, but the
+        // trailing Y/size/label smoothing (and the credits-label slide-down) still lag behind.
+        // Hold the final viewport and keep capturing until that motion eases fully to rest, so
+        // the clip decelerates smoothly into a settled final frame instead of cutting off.
+        if (!recordingCancelled) {
+            const finalView = getViewportAtTime(totalDurationMs);
+            applyViewport(finalView.vMin, finalView.vMax);
+            recordingProgress.value = { current: totalFrames, total: totalFrames, message: 'Settling final frame…' };
+
+            let frameIdx = totalFrames + 1;
+            const maxSettleFrames = Math.ceil(FPS); // hard cap ~1s so we never spin forever
+            for (let s = 0; s < maxSettleFrames && !recordingCancelled; s++) {
+                await nextTick();
+                await nextTick();
+                const remaining = updateRecordSmoothing();
+                await nextTick();
+                await new Promise(r => requestAnimationFrame(r));
+
+                const dataUrl = await htmlToImage.toPng(el, captureOpts);
+                await video.saveFrame(tmpDir, frameIdx++, dataUrl);
+
+                if (remaining < 0.5) break; // settled (sub-pixel) — final frame is at rest
+            }
         }
 
         if (!recordingCancelled) {
@@ -1156,6 +1333,10 @@ async function recordSequence() {
                 recordingProgress.value = { current: 0, total: 0, message: `FFmpeg error: ${result.error}` };
                 await video.cleanup(tmpDir);
                 _inPlayback = false;
+                _inRecording = false;
+                recordSmoothY.value = new Map();
+                recordLabelOpacity.value = 1;
+                recordLabelBottom.value = new Map();
                 isRecording.value = false;
                 return;
             }
@@ -1169,7 +1350,20 @@ async function recordSequence() {
     }
 
     _inPlayback = false;
+    _inRecording = false;
+    recordSmoothY.value = new Map();
+    recordLabelOpacity.value = 1;
+    recordLabelBottom.value = new Map();
     isRecording.value = false;
+
+    // Normalize the resting view: if it's at the full range, drop back to the unzoomed
+    // (null) state so the editor doesn't treat the timeline as zoomed after exporting.
+    const fr = fullMax - fullMin;
+    if (viewMin.value !== null && viewMax.value !== null &&
+        Math.abs((viewMax.value - viewMin.value) - fr) < fr * 0.01) {
+        viewMin.value = null;
+        viewMax.value = null;
+    }
 }
 
 // --- Timeline Re-Ranking Animation ---
@@ -1307,6 +1501,88 @@ function getRerankOffsetY(pkmnName: string): number {
 
 function getTimelineRerankClass(pkmnName: string): string {
     return rerankFadeClass.value.get(pkmnName) || '';
+}
+
+// Vertical position to render for an entry: the JS-smoothed value while recording,
+// otherwise the freshly-computed layout position.
+function displayTop(entry: { pkmnName: string; yPx: number }): number {
+    if (isRecording.value) {
+        const sm = recordSmoothY.value.get(entry.pkmnName);
+        if (sm !== undefined) return sm;
+    }
+    return entry.yPx;
+}
+
+// Credits-dodge `bottom` to render for a threshold value label: the smoothed (sliding)
+// value while recording, otherwise the freshly-computed target (CSS handles the slide live).
+function labelBottom(t: { tierIndex: number; valueBottom: number }): number {
+    if (isRecording.value) {
+        const sm = recordLabelBottom.value.get(t.tierIndex);
+        if (sm !== undefined) return sm;
+    }
+    return t.valueBottom;
+}
+
+// Connector geometry to render — derived from the smoothed top while recording so the
+// line stays attached to the sprite as it glides.
+function displayConnector(entry: { pkmnName: string; yPx: number; lineTop: number; lineHeight: number }): { lineTop: number; lineHeight: number } {
+    if (isRecording.value) {
+        const sm = recordSmoothY.value.get(entry.pkmnName);
+        if (sm !== undefined) return connectorGeom(sm, spriteSize.value);
+    }
+    return { lineTop: entry.lineTop, lineHeight: entry.lineHeight };
+}
+
+// Advance the recording motion smoothing one captured frame toward the current layout.
+// Returns the largest remaining distance (in px-equivalent units) between the rendered
+// and target states, so the settle tail can tell when the motion has come to rest.
+function updateRecordSmoothing(): number {
+    let maxDelta = 0;
+
+    // Smooth sprite size so discrete 2px size steps don't shift the whole layout at once.
+    const targetSize = targetSpriteSize.value;
+    spriteSize.value = _recordSmoothInit
+        ? spriteSize.value + (targetSize - spriteSize.value) * RECORD_SMOOTH
+        : targetSize;
+    maxDelta = Math.max(maxDelta, Math.abs(targetSize - spriteSize.value));
+
+    // Fade the threshold value labels toward their shown/hidden target.
+    const labelTarget = timelineView.value.thresholdLabelsVisible ? 1 : 0;
+    recordLabelOpacity.value = _recordSmoothInit
+        ? recordLabelOpacity.value + (labelTarget - recordLabelOpacity.value) * RECORD_SMOOTH
+        : labelTarget;
+    maxDelta = Math.max(maxDelta, Math.abs(labelTarget - recordLabelOpacity.value) * 100);
+
+    // Credits-dodge offset: snap UP instantly so the label never overlaps the credits,
+    // but ease DOWN only after the text has cleared, so it slides into place.
+    const nextBottom = new Map<number, number>();
+    for (const tp of timelineView.value.thresholdPositions ?? []) {
+        const cur = recordLabelBottom.value.get(tp.tierIndex);
+        let val: number;
+        if (cur === undefined || !_recordSmoothInit || tp.valueBottom > cur) {
+            val = tp.valueBottom; // first frame, or lifting up → snap
+        } else {
+            val = cur + (tp.valueBottom - cur) * RECORD_SMOOTH; // lowering → slide
+        }
+        nextBottom.set(tp.tierIndex, val);
+        maxDelta = Math.max(maxDelta, Math.abs(tp.valueBottom - val));
+    }
+    recordLabelBottom.value = nextBottom;
+
+    // Smooth each entry's vertical position toward its freshly-computed row target so
+    // row re-assignments glide instead of teleporting between captured frames.
+    const next = new Map<string, number>();
+    for (const e of positionedEntries.value) {
+        const cur = recordSmoothY.value.get(e.pkmnName);
+        const val = (cur === undefined || !_recordSmoothInit)
+            ? e.yPx
+            : cur + (e.yPx - cur) * RECORD_SMOOTH;
+        next.set(e.pkmnName, val);
+        maxDelta = Math.max(maxDelta, Math.abs(e.yPx - val));
+    }
+    recordSmoothY.value = next;
+    _recordSmoothInit = true;
+    return maxDelta;
 }
 
 // --- Timeline-specific context menu ---
@@ -1455,7 +1731,7 @@ defineExpose({
     <div
         class="timeline-container"
         ref="container"
-        :class="{ 'is-zoomed': isZoomed, 'is-dragging': !!dragState, 'exporting': fileexporter.exportInProgress }"
+        :class="{ 'is-zoomed': isZoomed, 'is-dragging': !!dragState, 'exporting': fileexporter.exportInProgress, 'recording-capture': isRecording }"
         @wheel.prevent="onWheel"
         @mousedown="onMouseDown"
         @click="unselectAll"
@@ -1471,7 +1747,7 @@ defineExpose({
         >
             <div class="threshold-tick" :style="{ background: t.color }"></div>
             <div class="threshold-tier-label" :style="{ color: t.color }">{{ t.tierName }}</div>
-            <div class="threshold-value-label" :class="{ hidden: !timelineView.thresholdLabelsVisible }" :style="{ color: t.color }">{{ t.label }}</div>
+            <div class="threshold-value-label" :class="{ hidden: !timelineView.thresholdLabelsVisible }" :style="{ color: t.color, bottom: labelBottom(t) + 'px', ...(isRecording ? { opacity: 0.6 * recordLabelOpacity } : {}) }">{{ t.label }}</div>
         </div>
 
         <!-- Connector lines from sprites to axis (regular entries only) -->
@@ -1481,8 +1757,8 @@ defineExpose({
             class="connector-line"
             :style="{
                 left: entry.xPx + 'px',
-                top: entry.lineTop + 'px',
-                height: entry.lineHeight + 'px',
+                top: displayConnector(entry).lineTop + 'px',
+                height: displayConnector(entry).lineHeight + 'px',
                 background: entry.color,
                 opacity: 0.6,
             }"
@@ -1494,14 +1770,14 @@ defineExpose({
             :key="entry.pkmnName"
             :pokemon="entry.pkmnName"
             :active="tierlist.selectedPkmn.has(entry.pkmnName)"
-            :no-hover="fileexporter.exportInProgress"
+            :no-hover="fileexporter.exportInProgress || isRecording"
             :height="spriteSize"
             :outline="1"
             class="timeline-sprite"
             :class="getTimelineRerankClass(entry.pkmnName)"
             :style="{
                 left: (entry.xPx - spriteSize / 2 + getRerankOffsetX(entry.pkmnName)) + 'px',
-                top: (entry.yPx + getRerankOffsetY(entry.pkmnName)) + 'px',
+                top: (displayTop(entry) + getRerankOffsetY(entry.pkmnName)) + 'px',
             }"
             @click.stop="
                 if (!$event.ctrlKey) {
@@ -1531,9 +1807,9 @@ defineExpose({
             v-for="entry in extremeEntries"
             :key="'outlier-' + entry.pkmnName"
             class="outlier-bubble"
-            :style="{ top: entry.yPx + 'px' }"
+            :style="{ top: displayTop(entry) + 'px' }"
         >
-            <PkmnImage :pokemon="entry.pkmnName" :height="spriteSize" :outline="1" />
+            <PkmnImage :pokemon="entry.pkmnName" :no-hover="fileexporter.exportInProgress || isRecording" :height="spriteSize" :outline="1" />
             <span class="outlier-value" :style="{ color: entry.color }">{{ entry.formattedValue }}</span>
         </div>
 
@@ -1626,6 +1902,15 @@ defineExpose({
     cursor: grab;
 }
 
+/* While recording, sprite/connector motion is smoothed in JS frame-by-frame, so the
+   wall-clock CSS transitions must be off — otherwise html-to-image samples them at
+   unpredictable progress and the exported video lurches. */
+.timeline-container.recording-capture .timeline-sprite,
+.timeline-container.recording-capture .connector-line,
+.timeline-container.recording-capture .threshold-value-label {
+    transition: none !important;
+}
+
 .timeline-container.is-dragging {
     cursor: grabbing;
 }
@@ -1633,8 +1918,11 @@ defineExpose({
 /* Threshold lines */
 .threshold-line {
     position: absolute;
-    top: 20px;
-    bottom: 50px;
+    /* Equal top/bottom insets so the timeline frame is vertically centered in the
+       1080p canvas (the threshold lines are the tallest elements, so they define the
+       graphic's top/bottom margins). */
+    top: 35px;
+    bottom: 35px;
     z-index: 5;
     pointer-events: none;
 }
@@ -1672,7 +1960,7 @@ defineExpose({
     white-space: nowrap;
     opacity: 0.6;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease, bottom 0.4s ease;
 }
 .threshold-value-label.hidden {
     opacity: 0;

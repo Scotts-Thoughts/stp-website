@@ -362,7 +362,7 @@ function setupIpcHandlers(): void {
     fs.writeFileSync(path.join(tmpDir, filename), buffer)
   })
 
-  ipcMain.handle('video:encode', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, outputPath: string, fps: number) => {
+  ipcMain.handle('video:encode', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, outputPath: string, fps: number, lossless: boolean = false) => {
     // Resolve ffmpeg binary path — try multiple locations
     const isWin = process.platform === 'win32'
     const ffmpegBin = isWin ? 'ffmpeg.exe' : 'ffmpeg'
@@ -408,7 +408,10 @@ function setupIpcHandlers(): void {
 
     const inputPattern = path.join(tmpDir, 'frame_%05d.png')
 
-    // Try ProRes 4444 first (supports alpha), fall back to PNG-in-MOV if unavailable
+    // Try ProRes 4444 first (supports alpha), fall back to PNG-in-MOV if unavailable.
+    // `-qscale:v` sets the quantizer (higher = smaller file); 11 roughly halves the size
+    // versus the default bitrate with no visible loss on these flat UI graphics. The alpha
+    // channel is stored losslessly regardless, so sprite/edge cutouts stay crisp.
     const proResArgs = [
       '-y',
       '-framerate', String(fps),
@@ -416,17 +419,24 @@ function setupIpcHandlers(): void {
       '-c:v', 'prores_ks',
       '-profile:v', '4444',
       '-pix_fmt', 'yuva444p10le',
+      '-qscale:v', '11',
       '-an',
       outputPath,
     ]
 
-    // PNG codec fallback (universally supported, preserves alpha, larger file)
+    // PNG-in-MOV: lossless RGBA. This is the color-accurate path used for the scroll video —
+    // it matches the PNG exports exactly in Premiere. (QuickTime Animation / qtrle would give
+    // inter-frame compression, but Premiere's QuickTime decoder applies its own gamma to it,
+    // producing a lighter image than the PNGs — a codec quirk that color tags can't override,
+    // so we stay on the png codec.) `-pred mixed` enables per-row PNG prediction filters for
+    // noticeably smaller files with zero quality loss; alpha is preserved.
     const pngArgs = [
       '-y',
       '-framerate', String(fps),
       '-i', inputPattern,
       '-c:v', 'png',
       '-pix_fmt', 'rgba',
+      '-pred', 'mixed',
       '-an',
       outputPath,
     ]
@@ -452,11 +462,18 @@ function setupIpcHandlers(): void {
       })
     }
 
-    // Try ProRes first
-    let result = await runFfmpeg(proResArgs)
-    if (!result.success) {
-      console.log('ProRes failed, trying PNG codec fallback...')
+    let result: { success: boolean; error?: string }
+    if (lossless) {
+      // Color-accurate lossless RGBA (PNG-in-MOV) so the scroll video matches the PNG exports
+      // exactly in Premiere (no ProRes RGB→YUV shift, no qtrle gamma quirk).
       result = await runFfmpeg(pngArgs)
+    } else {
+      // Try ProRes first (smaller files), fall back to PNG codec if unavailable
+      result = await runFfmpeg(proResArgs)
+      if (!result.success) {
+        console.log('ProRes failed, trying PNG codec fallback...')
+        result = await runFfmpeg(pngArgs)
+      }
     }
     return result
   })

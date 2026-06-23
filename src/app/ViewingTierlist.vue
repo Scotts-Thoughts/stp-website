@@ -2,9 +2,9 @@
 import { ref, watch, useTemplateRef, onMounted, onUnmounted, nextTick, type ComponentPublicInstance } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 
-import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion } from '../store';
+import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion, type ContextMenuOptionArg } from '../store';
 import { currentDate } from '../utils/time';
-import { recordRerankingAnimation } from '../utils/video-recorder';
+import { recordRerankingAnimation, recordChangeAnimation } from '../utils/video-recorder';
 
 import EditViewWindow from './EditViewWindow.vue'
 import EditMetricsWindow from './EditMetricsWindow.vue'
@@ -17,6 +17,7 @@ import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
 import TimelineView from '../components/TimelineView.vue'
 import QuickCalendarPopup from '../components/QuickCalendarPopup.vue'
+import ExportChangeAnimationModal from '../components/ExportChangeAnimationModal.vue'
 
 const emit = defineEmits<{
     close: [],
@@ -123,6 +124,7 @@ const searchActive = ref(false);
 const prevPopoutState = ref(false);
 const tierlistTableActive = ref(false);
 const quickCalendarActive = ref(false);
+const changeAnimActive = ref(false);
 const timelineActive = ref(false);
 const timelineRef = ref<ComponentPublicInstance | null>(null);
 
@@ -145,7 +147,7 @@ function setupMainContextMenu() {
     contextMenu.setOptions(mainContextMenuOptions);
 }
 
-const mainContextMenuOptions = [
+const mainContextMenuOptions: ContextMenuOptionArg[] = [
     // {
     //     label: () => global.hidden ? "Show Pokemon" : "Hide Pokemon",
     //     shortcut: 'R',
@@ -342,6 +344,16 @@ const mainContextMenuOptions = [
     //         exportElement(root.value!, filename);
     //     }
     {
+        label: 'Export Change Animation',
+        action() {
+            if (!window.electronVideo) {
+                toast.addToast('Video export requires the desktop app', 'error');
+                return;
+            }
+            changeAnimActive.value = true;
+        }
+    },
+    {
         label: 'Quick Date Filter',
         shortcut: 'Q',
         action() {
@@ -446,6 +458,56 @@ async function exportRerankingVideo() {
     if (!success) return;
 }
 
+// Export a "change animation" morphing the tierlist from date1's state to date2's state.
+async function exportChangeAnimation(payload: { date1: string, date2: string }) {
+    changeAnimActive.value = false;
+    if (!window.electronVideo) {
+        toast.addToast('Video export requires the desktop app', 'error');
+        return;
+    }
+    if (!root.value) return;
+
+    // Preserve the current view + selection so we can restore it after capture.
+    const originalDate = tierlist.releaseDateTreshold;
+    const prevPopout = global.popoutActive;
+    const prevSelected = new Set(tierlist.selectedPkmn);
+    global.popoutActive = false;
+    tierlist.selectedPkmn.clear();
+
+    let toastId = toast.addToast('Preparing change animation...', 'info', { timeout: -1, pending: true });
+
+    try {
+        await recordChangeAnimation({
+            wrapperEl: root.value,
+            date1: payload.date1,
+            date2: payload.date2,
+            async setDate(d) {
+                tierlist.releaseDateTreshold = d;
+                await nextTick();
+                // Two extra frames so the reactive re-layout fully settles before measuring.
+                await new Promise(r => requestAnimationFrame(() => r(null)));
+                await new Promise(r => requestAnimationFrame(() => r(null)));
+            },
+            onProgress(p) {
+                toast.removeToast(toastId);
+                if (p.phase === 'capturing' || p.phase === 'encoding') {
+                    toastId = toast.addToast(p.message, 'info', { timeout: -1, pending: true });
+                } else if (p.phase === 'done') {
+                    toast.addToast(p.message, 'success');
+                } else if (p.phase === 'error') {
+                    toast.addToast(p.message, 'error');
+                }
+            },
+        });
+    } finally {
+        // Restore the original view + selection.
+        tierlist.releaseDateTreshold = originalDate;
+        global.popoutActive = prevPopout;
+        tierlist.selectedPkmn.clear();
+        for (const n of prevSelected) tierlist.selectedPkmn.add(n);
+    }
+}
+
 // Last animation data for replay
 let lastReplay: { insertions: PendingInsertion[]; pokemon: string } | null = null;
 
@@ -522,7 +584,7 @@ onKeyDown('F1', async (e) => {
         @drop="onDrop"
     >
         <TimelineView v-if="timelineActive" ref="timelineRef" @close="timelineActive = false" />
-        <Tierlist v-else @restore-context-menu="setupMainContextMenu" />
+        <Tierlist v-else :context-menu-options="mainContextMenuOptions" @restore-context-menu="setupMainContextMenu" />
         <!-- Drop overlay -->
         <div v-if="isDraggingOver" class="drop-overlay">
             <div class="drop-overlay-content">
@@ -542,6 +604,12 @@ onKeyDown('F1', async (e) => {
         <EditThresholdsWindow :visible="mode === Mode.EDIT_THRESHOLDS" @close="mode = Mode.VIEWING" />
         <SearchWindow        :visible="searchActive"                 @close="searchActive = false" />
         <QuickCalendarPopup  :visible="quickCalendarActive"          @close="quickCalendarActive = false" />
+        <ExportChangeAnimationModal
+            :visible="changeAnimActive"
+            :date1="tierlist.releaseDateTreshold"
+            @close="changeAnimActive = false"
+            @export="exportChangeAnimation"
+        />
     </Teleport>
 </template>
 

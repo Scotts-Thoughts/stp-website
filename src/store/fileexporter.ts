@@ -202,7 +202,47 @@ export const useFileExporter = defineStore("file-exporter", () => {
                 
                 // Wait for the cloned root to layout
                 await new Promise(resolve => requestAnimationFrame(resolve));
-                
+
+                // Preserve each tier's current horizontal scroll position. cloneNode() resets a
+                // scroll container's scrollLeft to 0, and html-to-image ignores scrollLeft anyway,
+                // so we replicate the scroll by shifting the row's first flex child with a negative
+                // margin (same technique the scroll-video recorder uses). We also add the left
+                // edge-fade overlay for scrolled tiers (the `.exporting` CSS hides the real one),
+                // so a scrolled export looks the same as on screen / in the scroll video.
+                {
+                    const liveRows = root.querySelectorAll('.entry-row');
+                    const cloneRows = rootClone.querySelectorAll('.entry-row');
+                    const count = Math.min(liveRows.length, cloneRows.length);
+                    for (let i = 0; i < count; i++) {
+                        const scrollLeft = (liveRows[i] as HTMLElement).scrollLeft;
+                        if (scrollLeft <= 0) continue;
+                        const firstChild = cloneRows[i].firstElementChild as HTMLElement | null;
+                        if (firstChild) {
+                            const baseMargin = parseFloat(getComputedStyle(firstChild).marginLeft) || 0;
+                            firstChild.style.marginLeft = (baseMargin - scrollLeft) + 'px';
+                        }
+                        // Left edge-fade (inline styles mirror `.fade-left` in TierList.vue; the
+                        // scoped CSS won't apply to a manually-created element). Fades in over 60px.
+                        const wrapper = cloneRows[i].parentElement;
+                        if (wrapper) {
+                            const fade = document.createElement('div');
+                            fade.style.cssText = [
+                                'position: absolute',
+                                'top: 0',
+                                'bottom: 0',
+                                'left: 0',
+                                'width: 60px',
+                                'pointer-events: none',
+                                'z-index: 5',
+                                'border-radius: 11px 0 0 11px',
+                                'background: linear-gradient(to right, rgba(28, 28, 28, 1) 0%, rgba(28, 28, 28, 0) 100%)',
+                                'opacity: ' + String(Math.min(scrollLeft / 60, 1)),
+                            ].join('; ');
+                            wrapper.appendChild(fade);
+                        }
+                    }
+                }
+
                 // Clone and position teleported elements
                 [...tableWindows, ...visiblePopovers].forEach((element) => {
                     const clone = element.cloneNode(true) as HTMLElement;

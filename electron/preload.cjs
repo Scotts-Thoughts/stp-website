@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('electronWatch', {
 contextBridge.exposeInMainWorld('electronVideo', {
   createTempDir: () => ipcRenderer.invoke('video:createTempDir'),
   saveFrame: (tmpDir, frameIndex, dataUrl) => ipcRenderer.invoke('video:saveFrame', tmpDir, frameIndex, dataUrl),
-  encode: (tmpDir, outputPath, fps) => ipcRenderer.invoke('video:encode', tmpDir, outputPath, fps),
+  encode: (tmpDir, outputPath, fps, lossless) => ipcRenderer.invoke('video:encode', tmpDir, outputPath, fps, lossless),
   cleanup: (tmpDir) => ipcRenderer.invoke('video:cleanup', tmpDir),
   saveFileDialog: (defaultName) => ipcRenderer.invoke('dialog:saveFileDialog', defaultName),
 })

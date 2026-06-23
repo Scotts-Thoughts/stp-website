@@ -32,7 +32,7 @@ declare global {
     electronVideo?: {
       createTempDir: () => Promise<string>
       saveFrame: (tmpDir: string, frameIndex: number, dataUrl: string) => Promise<void>
-      encode: (tmpDir: string, outputPath: string, fps: number) => Promise<{ success: boolean; error?: string }>
+      encode: (tmpDir: string, outputPath: string, fps: number, lossless?: boolean) => Promise<{ success: boolean; error?: string }>
       cleanup: (tmpDir: string) => Promise<void>
       saveFileDialog: (defaultName: string) => Promise<string | null>
     }
