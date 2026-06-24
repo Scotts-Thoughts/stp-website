@@ -248,6 +248,12 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
         },
     },
     {
+        label: () => global.showBoxArt ? "Hide Box Art" : "Show Box Art",
+        action() {
+            global.showBoxArt = !global.showBoxArt;
+        },
+    },
+    {
         label: "Hide Selected",
         shortcut: "H",
         action() {

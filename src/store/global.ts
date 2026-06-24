@@ -8,6 +8,7 @@ export const useGlobal = defineStore("global", () => {
     const popoutActive = ref(true);
     const creditMode = ref(CreditMode.NONE);
     const animateReranking = ref(false);
+    const showBoxArt = ref(true);
     const obsPresent = (globalThis as any).obsstudio !== undefined;
 
     const cycleCreditModes = () => {
@@ -20,6 +21,7 @@ export const useGlobal = defineStore("global", () => {
         obsPresent,
         creditMode,
         animateReranking,
+        showBoxArt,
         cycleCreditModes
     }
 }, {

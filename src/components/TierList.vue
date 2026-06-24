@@ -317,6 +317,15 @@ const data = computed(() => {
     };
 });
 
+// Box art shown in the "ranked" area. Mirrors CartridgeIcon's path handling:
+// convert absolute /images/... paths to relative ./images/... and encode spaces.
+const boxArtSrc = computed(() => {
+    const src = tierlist.activeTierlist.cartridgeImage || tierlist.activeTierlist.imageSource;
+    if (!src) return undefined;
+    const normalized = src.startsWith('/') ? '.' + src : src;
+    return normalized.replace(/ /g, '%20');
+});
+
 function unselectAll() {
     tierlist.activePkmn = '';
     tierlist.activePrev = '';
@@ -1082,6 +1091,7 @@ function sleep(ms: number): Promise<void> {
             'no-credits': global.creditMode == CreditMode.NONE,
             'small-credits': global.creditMode == CreditMode.SMALL,
             'big-credits': global.creditMode == CreditMode.BIG,
+            'show-boxart': global.showBoxArt && boxArtSrc,
         }" @click="unselectAll()"
     >
         <template v-for="(group, i) in data.groups" >
@@ -1197,8 +1207,14 @@ function sleep(ms: number): Promise<void> {
             </div>
         </template>
         <div :class="'ranked gray-grad rounded'" @click.stop="showRankedPopover = !showRankedPopover">
-            <span>{{ data.rankedLabel }}:</span>
-            <span>{{ data.totalRanked }}/{{ data.total }}</span>
+            <template v-if="global.showBoxArt && boxArtSrc">
+                <img class="ranked-boxart" :src="boxArtSrc" alt="" />
+                <div class="ranked-divider"></div>
+            </template>
+            <div class="ranked-text">
+                <span>{{ data.rankedLabel }}:</span>
+                <span>{{ data.totalRanked }}/{{ data.total }}</span>
+            </div>
             <!-- Ranked total popover -->
             <div v-if="showRankedPopover" class="ranked-popover" @click.stop>
                 <div class="ranked-popover-title">Total options</div>
@@ -1263,6 +1279,20 @@ function sleep(ms: number): Promise<void> {
 
 .no-credits.tier-list {
     grid-template-columns: auto 1fr 0px 217px;
+}
+
+/* When box art is shown, widen the Ranked column so the art + text fit and stay
+   centered. In credit modes the Ranked area lives in column 3; in no-credits it
+   lives in column 4. When box art is off, these don't apply and the area reverts
+   to its original width. */
+.tier-list.show-boxart {
+    grid-template-columns: auto 1fr 340px 715px;
+}
+.small-credits.tier-list.show-boxart {
+    grid-template-columns: auto 1fr 340px 531px;
+}
+.no-credits.tier-list.show-boxart {
+    grid-template-columns: auto 1fr 0px 340px;
 }
 
 .category {
@@ -1525,19 +1555,46 @@ function sleep(ms: number): Promise<void> {
 
 .ranked {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     justify-content: center;
+    gap: 16px;
+    padding: 8px 16px;
     color: #919191;
     line-height: 1;
     font-family: "play";
     position: relative;
     cursor: pointer;
 }
-.ranked span:nth-child(1) {
+.ranked-boxart {
+    height: 72px;
+    width: auto;
+    max-width: 96px;
+    object-fit: contain;
+    border-radius: 4px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
+}
+.ranked-divider {
+    width: 2px;
+    align-self: stretch;
+    margin: 6px 0;
+    background: #ffffff20;
+    border-radius: 1px;
+}
+.ranked-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* Fixed width + centered text so the box art doesn't shift when the
+       ranked number changes digit count (e.g. 9/386 vs 151/386). */
+    width: 160px;
+    text-align: center;
+}
+.ranked-text span:nth-child(1) {
     margin-top: 5px;
     font-size: 30px;
 }
-.ranked span:nth-child(2) {
+.ranked-text span:nth-child(2) {
     margin-top: -4px;
     font-size: 44px;
 }
