@@ -79,6 +79,35 @@ export const useTierlist = defineStore("tierlist", () => {
 
     const activeTierlist = computed(() => workspace.activeTierlist);
 
+    // Remember the last-used display category per tierlist (keyed by filename),
+    // so reopening a tierlist restores the view it was closed in.
+    const CATEGORY_STORAGE_KEY = "tierlist-display-categories";
+    function loadSavedCategories(): Record<string, 'first' | 'best' | 'recent'> {
+        try {
+            return JSON.parse(localStorage.getItem(CATEGORY_STORAGE_KEY) ?? "{}");
+        } catch {
+            return {};
+        }
+    }
+    const savedCategories = loadSavedCategories();
+
+    // immediate: the store may be created after the tierlist was already activated,
+    // in which case the watcher would otherwise miss the first open.
+    watch(() => workspace.activeTierlist.filename, (filename) => {
+        if (!filename) return;
+        const saved = savedCategories[filename];
+        if (saved) {
+            activeCategory.value = saved;
+        }
+    }, { immediate: true });
+
+    watch(() => activeCategory.value, (category) => {
+        const filename = workspace.activeTierlist.filename;
+        if (!filename) return;
+        savedCategories[filename] = category;
+        localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(savedCategories));
+    });
+
     function resolveDefaultThresholdIndex() {
         const tl = workspace.activeTierlist;
         const defaults = tl.thresholdDefaults;
