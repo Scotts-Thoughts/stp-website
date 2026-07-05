@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('electronVideo', {
   saveFileDialog: (defaultName) => ipcRenderer.invoke('dialog:saveFileDialog', defaultName),
 })
 
+// Expose the YouTube Production Scheduler's project list (read-only) so captured
+// tierlist "states" can be named after the episode being produced.
+contextBridge.exposeInMainWorld('electronScheduler', {
+  readProjects: () => ipcRenderer.invoke('scheduler:readProjects'),
+})
+
 // Indicate that we're running in Electron
 contextBridge.exposeInMainWorld('isElectron', true)
 

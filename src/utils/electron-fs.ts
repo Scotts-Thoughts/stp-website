@@ -36,8 +36,19 @@ declare global {
       cleanup: (tmpDir: string) => Promise<void>
       saveFileDialog: (defaultName: string) => Promise<string | null>
     }
+    electronScheduler?: {
+      readProjects: () => Promise<SchedulerProject[] | null>
+    }
     isElectron?: boolean
   }
+}
+
+/** A project/episode from the YouTube Production Scheduler (only the fields we use). */
+export type SchedulerProject = {
+  title: string
+  game: string
+  releaseDate: string
+  seasonId?: string
 }
 
 /**

@@ -5,6 +5,7 @@ import { onKeyDown } from '@vueuse/core';
 import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion, type ContextMenuOptionArg } from '../store';
 import { currentDate } from '../utils/time';
 import { recordRerankingAnimation, recordChangeAnimation } from '../utils/video-recorder';
+import { loadSchedulerProjects, suggestEpisodeName } from '../utils/scheduler';
 
 import EditViewWindow from './EditViewWindow.vue'
 import EditMetricsWindow from './EditMetricsWindow.vue'
@@ -18,6 +19,7 @@ import Tierlist from '../components/TierList.vue'
 import TimelineView from '../components/TimelineView.vue'
 import QuickCalendarPopup from '../components/QuickCalendarPopup.vue'
 import ExportChangeAnimationModal from '../components/ExportChangeAnimationModal.vue'
+import StatesWindow from '../components/StatesWindow.vue'
 
 const emit = defineEmits<{
     close: [],
@@ -125,6 +127,7 @@ const prevPopoutState = ref(false);
 const tierlistTableActive = ref(false);
 const quickCalendarActive = ref(false);
 const changeAnimActive = ref(false);
+const statesActive = ref(false);
 const timelineActive = ref(false);
 const timelineRef = ref<ComponentPublicInstance | null>(null);
 
@@ -145,6 +148,35 @@ watch(timelineActive, (active) => {
 
 function setupMainContextMenu() {
     contextMenu.setOptions(mainContextMenuOptions);
+}
+
+// Capture the current view as a saved State. Names it after the scheduler episode
+// whose release date matches the current date-threshold (falling back to a
+// date-based name), then saves the workspace so the state is durable immediately.
+async function captureCurrentState() {
+    const game = tierlist.activeTierlist.game;
+    const date = tierlist.releaseDateTreshold;
+
+    let episodeTitle: string | undefined;
+    try {
+        const projects = await loadSchedulerProjects();
+        episodeTitle = suggestEpisodeName(projects, game, date) ?? undefined;
+    } catch {
+        episodeTitle = undefined;
+    }
+
+    const categoryLabel = tierlist.activeCategory === 'first' ? 'First'
+        : tierlist.activeCategory === 'recent' ? 'Most Recent' : 'Followup';
+    const name = episodeTitle ?? `${date} · ${categoryLabel}`;
+
+    const state = tierlist.captureState(name, episodeTitle);
+
+    const result = await workspace.saveWorkspace();
+    if (!result.success) {
+        toast.addToast(`State captured, but save failed: ${result.message}`, 'warning', { timeout: 3500 });
+    } else {
+        toast.addToast(`State captured: ${state.name}`, 'success', { timeout: 2500 });
+    }
 }
 
 const mainContextMenuOptions: ContextMenuOptionArg[] = [
@@ -367,6 +399,23 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
         }
     },
     {
+        label: "", // Separator
+    },
+    {
+        label: 'Capture State',
+        shortcut: 'B',
+        action() {
+            captureCurrentState();
+        }
+    },
+    {
+        label: () => tierlist.activeStateId ? 'States (viewing one)' : 'States',
+        shortcut: 'A',
+        action() {
+            statesActive.value = !statesActive.value;
+        }
+    },
+    {
         label: 'Set to Current Date',
         shortcut: 'W',
         action() {
@@ -408,6 +457,7 @@ onKeyDown('Escape', (e) => {
     searchActive.value = false;
     tierlistTableActive.value = false;
     quickCalendarActive.value = false;
+    statesActive.value = false;
     timelineActive.value = false;
     e.preventDefault();
 });
@@ -615,6 +665,11 @@ onKeyDown('F1', async (e) => {
             :date1="tierlist.releaseDateTreshold"
             @close="changeAnimActive = false"
             @export="exportChangeAnimation"
+        />
+        <StatesWindow
+            :visible="statesActive"
+            @close="statesActive = false"
+            @capture="captureCurrentState"
         />
     </Teleport>
 </template>

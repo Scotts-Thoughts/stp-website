@@ -272,6 +272,36 @@ function setupIpcHandlers(): void {
     return getUserDataPath()
   })
 
+  // Read the YouTube Production Scheduler's projects list so the tierlist app can
+  // name a captured "state" after the episode being produced. The scheduler is a
+  // sibling program under the same Dropbox root; we try a few likely locations and
+  // return the parsed array, or null if it can't be found/read (renderer degrades
+  // gracefully to a date-based name).
+  ipcMain.handle('scheduler:readProjects', async () => {
+    const candidates: string[] = []
+    if (process.env.STP_SCHEDULER_PROJECTS) {
+      candidates.push(process.env.STP_SCHEDULER_PROJECTS)
+    }
+    // Sibling of the app source (dev: cwd is the stp-website root)
+    candidates.push(path.join(process.cwd(), '..', 'scheduler', 'data', 'projects.json'))
+    candidates.push(path.join(app.getAppPath(), '..', 'scheduler', 'data', 'projects.json'))
+    // Known absolute location under Dropbox (packaged app / fallback)
+    candidates.push('A:\\Dropbox\\stp-projects\\programs\\scheduler\\data\\projects.json')
+
+    for (const candidate of candidates) {
+      try {
+        if (fs.existsSync(candidate)) {
+          const content = fs.readFileSync(candidate, 'utf-8')
+          const parsed = JSON.parse(content)
+          if (Array.isArray(parsed)) return parsed
+        }
+      } catch {
+        // Try the next candidate
+      }
+    }
+    return null
+  })
+
   // Workspace directory management
   ipcMain.handle('workspace:changeDirectory', async () => {
     const result = await dialog.showOpenDialog({

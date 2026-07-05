@@ -1,7 +1,8 @@
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { defineStore } from "pinia";
 
 import { useWorkspace } from ".";
+import { useGlobal } from "./global";
 import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } from "../utils/time"
 
 import { getPokemonData } from "../utils/pokemon/pokedex";
@@ -36,6 +37,47 @@ export type Tierlist = {
     dTierLabel?: string
     eTierLabel?: string
     fTierLabel?: string
+    states?: TierlistState[]
+}
+
+/**
+ * A saved snapshot of the view settings that produced a tierlist graphic, so the
+ * user can "go back in time" and recall the exact moment a graphic was made.
+ * Stored inside the tierlist JSON (durable, travels with the tierlist).
+ *
+ * Recall is non-destructive: it restores the view controls and pins the set of
+ * species that were displayed (`species`), so a Pokémon inserted later with an
+ * earlier release date won't reappear in the recalled graphic.
+ */
+export type TierlistState = {
+    id: string
+    name: string
+    createdAt: string
+    // view controls
+    category: 'first' | 'best' | 'recent'
+    metric: MetricKeys
+    thresholdIndex: number
+    thresholdLabel?: string
+    thresholdValues?: number[]
+    totalIndex: number
+    date: string
+    // filters
+    excludePokemon: string[]
+    includeTags: string[]
+    excludeTags: string[]
+    includeTypes: string[]
+    includeGrowthRates: string[]
+    includeYears: string[]
+    // display toggles
+    popoutActive: boolean
+    showBoxArt: boolean
+    creditMode: number
+    hidden: boolean
+    // frozen set of species shown in the graphic
+    species: string[]
+    // metadata (for display in the States list)
+    game?: string
+    episodeTitle?: string
 }
 
 export type TierlistEntry = {
@@ -60,6 +102,7 @@ const enum TierlistTierIndex {
 
 export const useTierlist = defineStore("tierlist", () => {
     const workspace = useWorkspace();
+    const global = useGlobal();
 
     const activePkmn = ref<string>('');
     const activePrev = ref<string>('');
@@ -68,6 +111,16 @@ export const useTierlist = defineStore("tierlist", () => {
     const activeThresholdIndex = ref<number>(0);
     const activeTotalIndex = ref<number>(0);
     const selectedPkmn = ref<Set<string>>(new Set());
+
+    // When a saved State is being viewed, the graphic is restricted to exactly the
+    // species that were displayed when it was captured (so later-inserted, earlier-dated
+    // Pokémon don't reappear). null = live view (no restriction).
+    const restrictSpecies = ref<Set<string> | null>(null);
+    // Id of the State currently being viewed, or '' when viewing live.
+    const activeStateId = ref<string>('');
+    // True only while recallState() is applying a snapshot, so the "manual change
+    // exits the state view" watcher below doesn't fire on our own mutations.
+    const recalling = ref(false);
 
     const excludePokemonList = ref<string[]>([]);
     const includeTagsList = ref<string[]>([]);
@@ -139,6 +192,22 @@ export const useTierlist = defineStore("tierlist", () => {
     watch(() => workspace.activeTierlist.thresholdDefaults, () => {
         resolveDefaultThresholdIndex();
     }, { deep: true });
+
+    // Manually changing the date or display view exits the saved-State view and
+    // returns to the live tierlist (removes the frozen-species restriction).
+    watch([() => releaseDateTreshold.value, () => activeCategory.value], () => {
+        if (recalling.value) return;
+        if (activeStateId.value || restrictSpecies.value) {
+            activeStateId.value = '';
+            restrictSpecies.value = null;
+        }
+    });
+
+    // Switching to a different tierlist always drops any active State view.
+    watch(() => workspace.activeTierlist.filename, () => {
+        activeStateId.value = '';
+        restrictSpecies.value = null;
+    });
 
 
     const filterByType = (pokemonName: string) => {
@@ -308,6 +377,10 @@ export const useTierlist = defineStore("tierlist", () => {
     const activeFilteredAttempts = computed(() => {
         const filteredAttempts = [];
         for (const { pkmnName, attempt } of activeAttempts.value) {
+            // When viewing a saved State, only show the species it captured.
+            if (restrictSpecies.value && !restrictSpecies.value.has(pkmnName)) {
+                continue;
+            }
             if (excludePokemonList.value.includes(pkmnName)) {
                 continue;
             }
@@ -434,6 +507,118 @@ export const useTierlist = defineStore("tierlist", () => {
         return activeAttempts.value.find((entry) => entry.pkmnName === pkmnName)?.attempt ?? {} as Metrics;
     }
 
+    /// STATES ///
+
+    // Saved snapshots for the active tierlist (newest first).
+    const states = computed<TierlistState[]>(() => activeTierlist.value.states ?? []);
+
+    // Every species currently rendered in the graphic (across all tiers).
+    function currentDisplayedSpecies(): string[] {
+        const names = new Set<string>();
+        for (const group of groupedEntries.value) {
+            for (const entry of group) names.add(entry.pkmnName);
+        }
+        return [...names];
+    }
+
+    /** Capture the current view as a new State on the active tierlist. */
+    function captureState(name: string, episodeTitle?: string): TierlistState {
+        const tl = activeTierlist.value;
+        const activeGroup = activeThresholdList.value?.[activeThresholdIndex.value];
+        const state: TierlistState = {
+            id: (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2)),
+            name,
+            createdAt: new Date().toISOString(),
+            category: activeCategory.value,
+            metric: activeMetric.value,
+            thresholdIndex: activeThresholdIndex.value,
+            thresholdLabel: activeGroup?.label,
+            thresholdValues: activeGroup?.data ? [...activeGroup.data] : undefined,
+            totalIndex: activeTotalIndex.value,
+            date: releaseDateTreshold.value,
+            excludePokemon: [...excludePokemonList.value],
+            includeTags: [...includeTagsList.value],
+            excludeTags: [...excludeTagsList.value],
+            includeTypes: [...includeTypeList.value],
+            includeGrowthRates: [...includeGrowthRateList.value],
+            includeYears: [...includeYearList.value],
+            popoutActive: global.popoutActive,
+            showBoxArt: global.showBoxArt,
+            creditMode: global.creditMode,
+            hidden: global.hidden,
+            species: currentDisplayedSpecies(),
+            game: tl.game,
+            episodeTitle,
+        };
+        if (!tl.states) tl.states = [];
+        tl.states.unshift(state);
+        return state;
+    }
+
+    /** Restore a saved State non-destructively and pin its species set. */
+    async function recallState(id: string): Promise<boolean> {
+        const state = activeTierlist.value.states?.find(s => s.id === id);
+        if (!state) return false;
+
+        recalling.value = true;
+        // Clear any existing restriction so the captured category isn't computed as empty.
+        restrictSpecies.value = null;
+
+        activeCategory.value = state.category;
+        activeMetric.value = state.metric;
+        releaseDateTreshold.value = state.date;
+        excludePokemonList.value = [...state.excludePokemon];
+        includeTagsList.value = [...state.includeTags];
+        excludeTagsList.value = [...state.excludeTags];
+        includeTypeList.value = [...state.includeTypes];
+        includeGrowthRateList.value = [...state.includeGrowthRates];
+        includeYearList.value = [...state.includeYears];
+        global.popoutActive = state.popoutActive;
+        global.showBoxArt = state.showBoxArt;
+        global.creditMode = state.creditMode;
+        global.hidden = state.hidden;
+
+        // Let the category/metric watchers (which reset the threshold index) flush first,
+        // then apply the saved threshold selection on top.
+        await nextTick();
+
+        const list = activeThresholdList.value;
+        let idx = state.thresholdIndex;
+        if (state.thresholdLabel && list) {
+            const found = list.findIndex(t => t.label === state.thresholdLabel);
+            if (found >= 0) idx = found;
+        }
+        activeThresholdIndex.value = idx;
+        activeTotalIndex.value = state.totalIndex;
+
+        activeStateId.value = id;
+        restrictSpecies.value = new Set(state.species);
+
+        // Release the guard after another flush so the date/category watcher doesn't
+        // treat our own mutations as a manual change.
+        await nextTick();
+        recalling.value = false;
+        return true;
+    }
+
+    function deleteState(id: string) {
+        const tl = activeTierlist.value;
+        if (!tl.states) return;
+        tl.states = tl.states.filter(s => s.id !== id);
+        if (activeStateId.value === id) returnToLive();
+    }
+
+    function renameState(id: string, name: string) {
+        const state = activeTierlist.value.states?.find(s => s.id === id);
+        if (state && name.trim()) state.name = name.trim();
+    }
+
+    /** Exit the saved-State view and return to the live tierlist. */
+    function returnToLive() {
+        activeStateId.value = '';
+        restrictSpecies.value = null;
+    }
+
     return {
         activeTierlist,
         activePkmn,
@@ -458,6 +643,15 @@ export const useTierlist = defineStore("tierlist", () => {
         groupedEntries,
         getMetrics,
         labels,
+        // states
+        states,
+        activeStateId,
+        restrictSpecies,
+        captureState,
+        recallState,
+        deleteState,
+        renameState,
+        returnToLive,
     }
 
 });
