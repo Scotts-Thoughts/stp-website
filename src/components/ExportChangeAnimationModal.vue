@@ -15,13 +15,21 @@ const emit = defineEmits<{
 
 const popupRef = ref<HTMLDivElement>();
 const startDate = ref<string>(props.date1);
-const endDate = ref<string>(props.date1);
+const endDate = ref<string>(nextDay(props.date1));
+
+/** YYYY-MM-DD string for the day after `date`; UTC math avoids DST/timezone off-by-one. */
+function nextDay(date: string): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    if (isNaN(d.getTime())) return date;
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+}
 
 // Re-seed the fields each time the modal opens so Date 1 reflects the current view.
 watch(() => props.visible, async (visible) => {
     if (visible) {
         startDate.value = props.date1;
-        endDate.value = props.date1;
+        endDate.value = nextDay(props.date1);
         await nextTick();
         popupRef.value?.focus();
     }
