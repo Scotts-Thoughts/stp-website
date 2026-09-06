@@ -196,8 +196,14 @@ const finalPokemonName = computed(() => {
     if (!pokemon.value) return "";
     let name = "";
     if (pokemonForm.value && hasForms.value) {
+        // Some species list themselves as one of their own forms (Kyurem, Rotom,
+        // Necrozma, Sinistea, ...). That option means "the base form", so it must
+        // resolve to the plain species name rather than "Kyurem-Kyurem".
+        if (pokemonForm.value === pokemon.value) {
+            name = pokemon.value;
+        }
         // Special case for Paldean Tauros breeds
-        if (pokemon.value === "Tauros" && (pokemonForm.value === "Combat Breed" || pokemonForm.value === "Blaze Breed" || pokemonForm.value === "Aqua Breed")) {
+        else if (pokemon.value === "Tauros" && (pokemonForm.value === "Combat Breed" || pokemonForm.value === "Blaze Breed" || pokemonForm.value === "Aqua Breed")) {
             name = `Paldean ${pokemon.value} (${pokemonForm.value})`;
         } else {
             // Check if this is a regional form (starts with Alolan, Galarian, Hisuian, or Paldean)
