@@ -365,6 +365,14 @@ export const useTierlist = defineStore("tierlist", () => {
             return bestTresholds.value[activeMetric.value];
         }
     });
+
+    // The watchers above only fire on *changes*. This store is created lazily — the first
+    // time the ViewingTierlist screen mounts — at which point the tierlist is already
+    // active and the saved category has already been applied, so none of them run on the
+    // first open and the index would sit at 0 until a view was cycled. Resolve once here,
+    // after activeThresholdList (which resolveDefaultThresholdIndex reads) is defined.
+    resolveDefaultThresholdIndex();
+
     const activeAttempts = computed(() => {
         if (activeCategory.value === "first") {
             return firstAttempts.value;
@@ -689,21 +697,25 @@ export const METRIC_NUMBER_KEYS = [
     "level_0", "resets_0", "blackouts_0",
 ] as const;
 
+// formatStorage is the on-disk format for time metrics, kept separate from the display
+// formatters: the loader reads these strings with parseTime, which treats a 2-part string
+// as MM:SS, so gametime must always serialize with its seconds field.
 export const METRIC: Record<MetricKeys, {
     title: string
     formatLabel?: (x: number) => string
     formatValue?: (x: number) => string
+    formatStorage?: (x: number) => string
 }> = {
     finished: { title: "Finished" },
     releasedate: { title: "Release Date" },
-    gametime: { title: "Game Time", formatLabel: (x) => formatTimeHM(x), formatValue: (x) => formatTimeHMS(x, false) },
-    realtime: { title: "Real Time", formatLabel: (x) => formatTimeHMS(x, false), formatValue: (x) => formatTimeFull(x, false) },
+    gametime: { title: "Game Time", formatLabel: (x) => formatTimeHM(x), formatValue: (x) => formatTimeHM(x), formatStorage: (x) => formatTimeHMS(x, false) },
+    realtime: { title: "Real Time", formatLabel: (x) => formatTimeHMS(x, false), formatValue: (x) => formatTimeFull(x, false), formatStorage: (x) => formatTimeFull(x, false) },
     level: { title: "Level", formatLabel: (x) => "Lv:" + x },
     resets: { title: "Resets" },
     blackouts: { title: "Blackouts" },
     faults: { title: "Faults" },
-    gametime_0: { title: "Game Time (Mid)", formatLabel: (x) => formatTimeHM(x), formatValue: (x) => formatTimeHMS(x, false) },
-    realtime_0: { title: "Real Time (Mid)", formatLabel: (x) => formatTimeHMS(x, false), formatValue: (x) => formatTimeFull(x, false) },
+    gametime_0: { title: "Game Time (Mid)", formatLabel: (x) => formatTimeHM(x), formatValue: (x) => formatTimeHM(x), formatStorage: (x) => formatTimeHMS(x, false) },
+    realtime_0: { title: "Real Time (Mid)", formatLabel: (x) => formatTimeHMS(x, false), formatValue: (x) => formatTimeFull(x, false), formatStorage: (x) => formatTimeFull(x, false) },
     level_0: { title: "Level (Mid)", formatLabel: (x) => "Lv:" + x },
     resets_0: { title: "Resets (Mid)" },
     blackouts_0: { title: "Blackouts (Mid)" },

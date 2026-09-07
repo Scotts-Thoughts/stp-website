@@ -4,7 +4,7 @@ import Window from '../components/Window.vue'
 import DropdownSelect from '../components/DropdownSelect.vue';
 
 import { useTierlist } from '../store';
-import { formatTimeHMS, formatTimeFull, parseTime, formatDate, parseDate } from '../utils/time';
+import { formatTimeHM, formatTimeFull, parseTime, parseGameTime, formatDate, parseDate } from '../utils/time';
 
 const props = defineProps<{
     visible: boolean
@@ -36,7 +36,7 @@ const centeredPosition = computed(() => {
 
 const pokemon = ref("");
 const finished = ref(true);
-const gametime = ref("0:00:00");
+const gametime = ref("0:00");
 const realtime = ref("0:00:00.00");
 const level = ref("-1");
 const resets = ref("-1");
@@ -83,7 +83,7 @@ function populateData() {
 
     releasedate.value = formatDate(attempt.releasedate);
     finished.value = attempt.finished === 1;
-    gametime.value = formatTimeHMS(attempt.gametime);
+    gametime.value = formatTimeHM(attempt.gametime);
     realtime.value = formatTimeFull(attempt.realtime);
     level.value = attempt.level.toString();
     resets.value = attempt.resets.toString();
@@ -140,7 +140,7 @@ function updateMetric() {
 
     attempt.releasedate = parseDate(releasedate.value);
     attempt.finished = finished.value ? 1 : 0;
-    attempt.gametime = parseTime(gametime.value);
+    attempt.gametime = parseGameTime(gametime.value);
     attempt.realtime = parseTime(realtime.value);
     attempt.level = parseInt(level.value);
     attempt.resets = parseInt(resets.value);

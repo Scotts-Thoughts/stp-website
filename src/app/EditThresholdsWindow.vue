@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Window from '../components/Window.vue'
 import { METRIC, METRIC_TIME_KEYS, type MetricKeys, useWorkspace } from '../store';
-import { formatTimeHMS } from '../utils/time';
+import { formatTimeHM, formatTimeHMS } from '../utils/time';
 
 // ============================================================================
 // Component Props & Emits
@@ -120,6 +120,11 @@ function setArr(view: ViewKey, arr: { label: string; data: number[] }[], metric:
 
 function isTimeMetric(metric: string): boolean {
     return (METRIC_TIME_KEYS as readonly string[]).includes(metric);
+}
+
+/** Gametime thresholds are entered/displayed without seconds (H:MM); realtime keeps H:MM:SS. */
+function isGametimeMetric(metric: string): boolean {
+    return metric === 'gametime' || metric === 'gametime_0';
 }
 
 /**
@@ -333,7 +338,8 @@ function handleCellPaste(event: ClipboardEvent) {
     if (!isTimeMetric(selectedMetric.value)) return;
     event.preventDefault();
     const text = (event.clipboardData?.getData('text') || '').replace(/\D/g, '');
-    if (text) digits.value = text.split('').map(Number).slice(-6).reverse();
+    const max = isGametimeMetric(selectedMetric.value) ? 4 : 6;
+    if (text) digits.value = text.split('').map(Number).slice(-max).reverse();
 }
 
 // ============================================================================
@@ -346,13 +352,21 @@ function handleCellPaste(event: ClipboardEvent) {
 //   digits[2] = minutes ones, digits[3] = minutes tens,
 //   digits[4] = hours ones,   digits[5] = hours tens.
 // Max 6 digits = HH:MM:SS.
+// Gametime has no seconds field, so its buffer is 4 digits max:
+//   digits[0] = minutes ones, digits[1] = minutes tens,
+//   digits[2] = hours ones,   digits[3] = hours tens.
 
 const digits = ref<number[]>([]);
 
-/** Converts the current digit buffer to a display string "H:MM:SS". */
+/** Converts the current digit buffer to a display string "H:MM:SS" (or "H:MM" for gametime). */
 function digitsToDisplay(): string {
     const d = digits.value;
     const pad = (n: number) => String(n).padStart(2, '0');
+    if (isGametimeMetric(selectedMetric.value)) {
+        const h = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
+        const m = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
+        return `${h}:${pad(m)}`;
+    }
     const h = ((d[5] ?? 0) * 10) + (d[4] ?? 0);
     const m = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
     const s = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
@@ -362,6 +376,11 @@ function digitsToDisplay(): string {
 /** Converts the current digit buffer to milliseconds. */
 function digitsToMs(): number {
     const d = digits.value;
+    if (isGametimeMetric(selectedMetric.value)) {
+        const h = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
+        const m = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
+        return (h * 60 + m) * 60 * 1000;
+    }
     const h = ((d[5] ?? 0) * 10) + (d[4] ?? 0);
     const m = ((d[3] ?? 0) * 10) + (d[2] ?? 0);
     const s = ((d[1] ?? 0) * 10) + (d[0] ?? 0);
@@ -369,7 +388,10 @@ function digitsToMs(): number {
 }
 
 /** Pushes a new digit onto the front (ones place) and shifts existing digits left. */
-function digitsPush(digit: number) { digits.value = [digit, ...digits.value].slice(0, 6); }
+function digitsPush(digit: number) {
+    const max = isGametimeMetric(selectedMetric.value) ? 4 : 6;
+    digits.value = [digit, ...digits.value].slice(0, max);
+}
 
 /** Removes the most recent digit (from the ones place), shifting everything right. */
 function digitsPop() { if (digits.value.length > 0) digits.value = digits.value.slice(1); }
@@ -481,6 +503,7 @@ function onDragEnd() {
 /** Formats a threshold value for display. Negative values show as '--'. */
 function formatValue(v: number): string {
     if (v < 0) return '--';
+    if (isGametimeMetric(selectedMetric.value)) return formatTimeHM(v);
     if (isTimeMetric(selectedMetric.value)) return formatTimeHMS(v, false);
     return String(v);
 }

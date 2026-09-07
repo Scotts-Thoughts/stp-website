@@ -805,7 +805,7 @@ function stringifyTierlist(tierlist: Tierlist): string {
         for (const key of METRIC_TIME_KEYS) {
             const arr = src[key];
             if (arr) {
-                const formatter = METRIC[key].formatValue!;
+                const formatter = METRIC[key].formatStorage!;
                 dst[key] = arr.map(x => ({ label: x.label, data: x.data.map(formatter) }));
             }
         }
@@ -839,7 +839,7 @@ function stringifyTierlist(tierlist: Tierlist): string {
                 if (attempt[key] === -1) {
                     continue
                 }
-                attemptRaw[key] = METRIC[key].formatValue!(attempt[key]);
+                attemptRaw[key] = METRIC[key].formatStorage!(attempt[key]);
             }
 
             for (const key of METRIC_NUMBER_KEYS) {

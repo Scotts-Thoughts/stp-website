@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { METRIC, MetricKeys, useTierlist } from '../store';
-import { formatTimeHMS, formatTimeFull, parseTime } from '../utils/time';
+import { formatTimeHM, formatTimeFull, parseTime, parseGameTime } from '../utils/time';
 
 const props = withDefaults(defineProps<{
     pokemon: string,
@@ -43,7 +43,7 @@ function enterEditMode() {
         if (v === undefined || v < 0) {
             values[key] = "-1";
         } else if (key === "gametime") {
-            values[key] = formatTimeHMS(v, false);
+            values[key] = formatTimeHM(v);
         } else if (key === "realtime") {
             values[key] = formatTimeFull(v, false);
         } else {
@@ -74,8 +74,10 @@ function saveEdit() {
 
     // Parse and apply each edited value
     for (const [key, value] of Object.entries(editValues.value)) {
-        if (key === "realtime" || key === "gametime") {
+        if (key === "realtime") {
             attempt[key] = parseTime(value);
+        } else if (key === "gametime") {
+            attempt[key] = parseGameTime(value);
         } else if (key === "level" || key === "resets" || key === "blackouts") {
             attempt[key] = parseInt(value);
         }

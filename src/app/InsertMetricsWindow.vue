@@ -4,7 +4,7 @@ import Window from '../components/Window.vue'
 
 import { pokemonNames, getBaseSpeciesName, appendAlternativeMoveType } from '../utils/pokemon'
 import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
-import { currentDate, parseDate, parseTime } from '../utils/time';
+import { currentDate, parseDate, parseTime, parseGameTime } from '../utils/time';
 
 // Regional form prefixes
 const REGIONAL_PREFIXES = ['Alolan', 'Galarian', 'Hisuian', 'Paldean'];
@@ -126,7 +126,7 @@ const pokemonForm = ref<string>("");
 const alternativeMoveType = ref<string>("");
 const releasedate = ref("1970-01-01");
 const finished = ref<boolean>(true);
-const gametime = ref<string>("0:00:00");
+const gametime = ref<string>("0:00");
 const realtime = ref<string>("0:00:00.00");
 const level = ref<string>("-1");
 const resets = ref<string>("-1");
@@ -232,7 +232,7 @@ function reset() {
     alternativeMoveType.value = "";
     releasedate.value = currentDate();
     finished.value = true;
-    gametime.value = "0:00:00";
+    gametime.value = "0:00";
     realtime.value = "0:00:00.00";
     level.value = "-1";
     resets.value = "-1";
@@ -273,7 +273,7 @@ function insertMetric() {
     const attempt = {
         releasedate: parseDate(releasedate.value),
         finished: finished.value ? 1 : 0,
-        gametime: parseTime(gametime.value),
+        gametime: parseGameTime(gametime.value),
         realtime: parseTime(realtime.value),
         level: parseInt(level.value, 10),
         resets: parseInt(resets.value, 10),
