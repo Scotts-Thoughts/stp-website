@@ -45,15 +45,16 @@ export const TIERLIST_GAMES: GameConfig[] = [
   { name: 'Moon', platform: 'Nintendo 3DS', cartridgeImage: '/images/cover-art/Moon.png' },
   { name: 'Ultra Sun', platform: 'Nintendo 3DS', cartridgeImage: '/images/cover-art/Ultra Sun.png' },
   { name: 'Ultra Moon', platform: 'Nintendo 3DS', cartridgeImage: '/images/cover-art/Ultra Moon.png' },
-  // Gen 8 - Nintendo Switch
+  // Gen 7 - Nintendo Switch (Let's Go are Gen 7 titles on Switch hardware)
   { name: "Let's Go Pikachu", platform: 'Nintendo Switch', cartridgeImage: "/images/cover-art/Let's Go Pikachu.png" },
   { name: "Let's Go Eevee", platform: 'Nintendo Switch', cartridgeImage: "/images/cover-art/Let's Go Eevee.png" },
+  // Gen 8 - Nintendo Switch
   { name: 'Sword', platform: 'Nintendo Switch', cartridgeImage: '/images/cover-art/Sword.png' },
   { name: 'Shield', platform: 'Nintendo Switch', cartridgeImage: '/images/cover-art/Shield.png' },
   { name: 'Brilliant Diamond', platform: 'Nintendo Switch', cartridgeImage: '/images/cover-art/Brilliant Diamond.png' },
   { name: 'Shining Pearl', platform: 'Nintendo Switch', cartridgeImage: '/images/cover-art/Shining Pearl.png' },
   // Gen 9 - Switch2 row
-  { name: 'Scarlett', platform: 'Switch2', cartridgeImage: '/images/cover-art/Scarlett.webp' },
+  { name: 'Scarlet', platform: 'Switch2', cartridgeImage: '/images/cover-art/Scarlet.webp' },
   { name: 'Violet', platform: 'Switch2', cartridgeImage: '/images/cover-art/Violet.webp' },
   // Custom / other
   { name: 'Winds', platform: 'Other', cartridgeImage: '/images/cover-art/Winds.jpg' },
@@ -65,7 +66,7 @@ const GAME_ALIASES: Record<string, string> = {
   'Green': 'Green (Jpn)',
   'Japanese Green': 'Green (Jpn)',
   'Green (Japanese)': 'Green (Jpn)',
-  'Scarlet': 'Scarlett', // common spelling variant
+  'Scarlett': 'Scarlet', // tierlists saved before the spelling was corrected
   'Black2': 'Black 2',
   'White2': 'White 2',
 }

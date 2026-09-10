@@ -286,7 +286,7 @@ const displayImage = computed(() => {
   background: linear-gradient(135deg, #c62b8d 0%, #9b2d6b 50%, #4a1942 100%);
 }
 
-.cartridge.scarlett .cartridge-body {
+.cartridge.scarlet .cartridge-body {
   background: linear-gradient(135deg, #dc3545 0%, #b02a37 50%, #842029 100%);
 }
 

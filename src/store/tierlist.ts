@@ -5,7 +5,7 @@ import { useWorkspace } from ".";
 import { useGlobal } from "./global";
 import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } from "../utils/time"
 
-import { getPokemonData } from "../utils/pokemon/pokedex";
+import { getPokemonData, hasPokedexData } from "../utils/pokemon/pokedex";
 
 export type Tierlist = {
     filename: string
@@ -212,6 +212,9 @@ export const useTierlist = defineStore("tierlist", () => {
 
     const filterByType = (pokemonName: string) => {
         if (includeTypeList.value.length === 0) return true;
+        // No pokedex data for this game at all (Gen 6 onwards): the filter cannot be
+        // evaluated, so let everything through rather than emptying the whole tierlist.
+        if (!hasPokedexData(activeTierlist.value.game)) return true;
         const pokemonData = getPokemonData(activeTierlist.value.game, pokemonName);
         if (!pokemonData) return false;
         return includeTypeList.value.includes(pokemonData.type_1) ||
@@ -220,6 +223,7 @@ export const useTierlist = defineStore("tierlist", () => {
 
     const filterByGrowthRate = (pokemonName: string) => {
         if (includeGrowthRateList.value.length === 0) return true;
+        if (!hasPokedexData(activeTierlist.value.game)) return true;
         const pokemonData = getPokemonData(activeTierlist.value.game, pokemonName);
         if (!pokemonData) return false;
         return includeGrowthRateList.value.includes(pokemonData.growth_rate);

@@ -662,6 +662,7 @@ function parseTierlist(data: string): Tierlist | undefined {
     let gameName = tierlistRaw.game || "Yellow";
     if (gameName === "Black2") gameName = "Black 2";
     if (gameName === "White2") gameName = "White 2";
+    if (gameName === "Scarlett") gameName = "Scarlet"; // spelling corrected in TIERLIST_GAMES
     tierlist.game = gameName;
     tierlist.total = tierlistRaw.total;
     tierlist.thresholds_first = {};

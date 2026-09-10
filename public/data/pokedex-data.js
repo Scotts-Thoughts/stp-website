@@ -416371,9 +416371,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Tranquil": {
+        "Tranquill": {
             "rom_id": 520,
-            "species": "Tranquil",
+            "species": "Tranquill",
             "type_1": "Normal",
             "type_2": "Flying",
             "base_stats": {
@@ -433653,6 +433653,288 @@ const pokedexData = {
             "type_2": "Psychic",
             "base_stats": {
                 "hp": 50,
+                "attack": 180,
+                "defense": 20,
+                "speed": 150,
+                "special_attack": 180,
+                "special_defense": 20
+            },
+            "ev_yield": {
+                "hp": 0,
+                "attack": 2,
+                "defense": 0,
+                "speed": 0,
+                "special_attack": 1,
+                "special_defense": 0
+            },
+            "base_experience": 270,
+            "weight": 60.8,
+            "growth_rate": "Slow",
+            "abilities": [
+                "Pressure"
+            ],
+            "level_up_learnset": [
+                [
+                    1,
+                    "Leer"
+                ],
+                [
+                    1,
+                    "Wrap"
+                ],
+                [
+                    9,
+                    "Night Shade"
+                ],
+                [
+                    17,
+                    "Double Team"
+                ],
+                [
+                    25,
+                    "Knock Off"
+                ],
+                [
+                    33,
+                    "Pursuit"
+                ],
+                [
+                    41,
+                    "Psychic"
+                ],
+                [
+                    49,
+                    "Swift"
+                ],
+                [
+                    57,
+                    "Psycho Shift"
+                ],
+                [
+                    65,
+                    "Zen Headbutt"
+                ],
+                [
+                    73,
+                    "Agility"
+                ],
+                [
+                    81,
+                    "Recover"
+                ],
+                [
+                    89,
+                    "Psycho Boost"
+                ],
+                [
+                    97,
+                    "ExtremeSpeed"
+                ]
+            ],
+            "tm_hm_learnset": [
+                "Psyshock",
+                "Calm Mind",
+                "Toxic",
+                "Hidden Power",
+                "Sunny Day",
+                "Taunt",
+                "Ice Beam",
+                "Hyper Beam",
+                "Light Screen",
+                "Protect",
+                "Rain Dance",
+                "Telekinesis",
+                "Safeguard",
+                "Frustration",
+                "SolarBeam",
+                "Thunderbolt",
+                "Thunder",
+                "Return",
+                "Psychic",
+                "Shadow Ball",
+                "Brick Break",
+                "Double Team",
+                "Reflect",
+                "Rock Tomb",
+                "Aerial Ace",
+                "Torment",
+                "Facade",
+                "Rest",
+                "Low Sweep",
+                "Round",
+                "Ally Switch",
+                "Focus Blast",
+                "Energy Ball",
+                "Fling",
+                "Charge Beam",
+                "Giga Impact",
+                "Flash",
+                "Thunder Wave",
+                "Psych Up",
+                "Rock Slide",
+                "Poison Jab",
+                "Dream Eater",
+                "Grass Knot",
+                "Swagger",
+                "Substitute",
+                "Flash Cannon",
+                "Trick Room",
+                "Rock Smash",
+                "Cut",
+                "Strength"
+            ],
+            "tutor_learnset": [],
+            "egg_moves": [],
+            "evolution_family": []
+        },
+        "Deoxys (Defense)": {
+            "rom_id": 653,
+            "species": "Deoxys (Defense)",
+            "type_1": "Psychic",
+            "type_2": "Psychic",
+            "base_stats": {
+                "hp": 50,
+                "attack": 70,
+                "defense": 160,
+                "speed": 90,
+                "special_attack": 70,
+                "special_defense": 160
+            },
+            "ev_yield": {
+                "hp": 0,
+                "attack": 0,
+                "defense": 2,
+                "speed": 0,
+                "special_attack": 0,
+                "special_defense": 1
+            },
+            "base_experience": 270,
+            "weight": 60.8,
+            "growth_rate": "Slow",
+            "abilities": [
+                "Pressure"
+            ],
+            "level_up_learnset": [
+                [
+                    1,
+                    "Leer"
+                ],
+                [
+                    1,
+                    "Wrap"
+                ],
+                [
+                    9,
+                    "Night Shade"
+                ],
+                [
+                    17,
+                    "Double Team"
+                ],
+                [
+                    25,
+                    "Knock Off"
+                ],
+                [
+                    33,
+                    "Pursuit"
+                ],
+                [
+                    41,
+                    "Psychic"
+                ],
+                [
+                    49,
+                    "Swift"
+                ],
+                [
+                    57,
+                    "Psycho Shift"
+                ],
+                [
+                    65,
+                    "Zen Headbutt"
+                ],
+                [
+                    73,
+                    "Agility"
+                ],
+                [
+                    81,
+                    "Recover"
+                ],
+                [
+                    89,
+                    "Psycho Boost"
+                ],
+                [
+                    97,
+                    "ExtremeSpeed"
+                ]
+            ],
+            "tm_hm_learnset": [
+                "Psyshock",
+                "Calm Mind",
+                "Toxic",
+                "Hidden Power",
+                "Sunny Day",
+                "Taunt",
+                "Ice Beam",
+                "Hyper Beam",
+                "Light Screen",
+                "Protect",
+                "Rain Dance",
+                "Telekinesis",
+                "Safeguard",
+                "Frustration",
+                "SolarBeam",
+                "Thunderbolt",
+                "Thunder",
+                "Return",
+                "Psychic",
+                "Shadow Ball",
+                "Brick Break",
+                "Double Team",
+                "Reflect",
+                "Rock Tomb",
+                "Aerial Ace",
+                "Torment",
+                "Facade",
+                "Rest",
+                "Low Sweep",
+                "Round",
+                "Ally Switch",
+                "Focus Blast",
+                "Energy Ball",
+                "Fling",
+                "Charge Beam",
+                "Giga Impact",
+                "Flash",
+                "Thunder Wave",
+                "Psych Up",
+                "Rock Slide",
+                "Poison Jab",
+                "Dream Eater",
+                "Grass Knot",
+                "Swagger",
+                "Substitute",
+                "Flash Cannon",
+                "Trick Room",
+                "Rock Smash",
+                "Cut",
+                "Strength"
+            ],
+            "tutor_learnset": [],
+            "egg_moves": [],
+            "evolution_family": []
+        },
+        "Deoxys (Speed)": {
+            "rom_id": 654,
+            "species": "Deoxys (Speed)",
+            "type_1": "Psychic",
+            "type_2": "Psychic",
+            "base_stats": {
+                "hp": 50,
                 "attack": 95,
                 "defense": 90,
                 "speed": 180,
@@ -433787,9 +434069,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Deoxys (Defense)": {
-            "rom_id": 653,
-            "species": "Deoxys (Defense)",
+        "Wormadam (Sandy)": {
+            "rom_id": 655,
+            "species": "Wormadam (Sandy)",
             "type_1": "Bug",
             "type_2": "Ground",
             "base_stats": {
@@ -433905,9 +434187,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Deoxys (Speed)": {
-            "rom_id": 654,
-            "species": "Deoxys (Speed)",
+        "Wormadam (Trash)": {
+            "rom_id": 656,
+            "species": "Wormadam (Trash)",
             "type_1": "Bug",
             "type_2": "Steel",
             "base_stats": {
@@ -434020,9 +434302,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Wormadam (Sandy)": {
-            "rom_id": 655,
-            "species": "Wormadam (Sandy)",
+        "Shaymin (Sky)": {
+            "rom_id": 657,
+            "species": "Shaymin (Sky)",
             "type_1": "Grass",
             "type_2": "Flying",
             "base_stats": {
@@ -434125,9 +434407,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Wormadam (Trash)": {
-            "rom_id": 656,
-            "species": "Wormadam (Trash)",
+        "Giratina (Origin)": {
+            "rom_id": 658,
+            "species": "Giratina (Origin)",
             "type_1": "Ghost",
             "type_2": "Dragon",
             "base_stats": {
@@ -434256,247 +434538,11 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Shaymin (Sky)": {
-            "rom_id": 657,
-            "species": "Shaymin (Sky)",
-            "type_1": "Electric",
-            "type_2": "Fire",
-            "base_stats": {
-                "hp": 50,
-                "attack": 65,
-                "defense": 107,
-                "speed": 86,
-                "special_attack": 105,
-                "special_defense": 107
-            },
-            "ev_yield": {
-                "hp": 0,
-                "attack": 0,
-                "defense": 0,
-                "speed": 1,
-                "special_attack": 1,
-                "special_defense": 0
-            },
-            "base_experience": 182,
-            "weight": 0.3,
-            "growth_rate": "Medium Fast",
-            "abilities": [
-                "Levitate"
-            ],
-            "level_up_learnset": [
-                [
-                    1,
-                    "Trick"
-                ],
-                [
-                    1,
-                    "Astonish"
-                ],
-                [
-                    1,
-                    "Thunder Wave"
-                ],
-                [
-                    1,
-                    "ThunderShock"
-                ],
-                [
-                    1,
-                    "Confuse Ray"
-                ],
-                [
-                    8,
-                    "Uproar"
-                ],
-                [
-                    15,
-                    "Double Team"
-                ],
-                [
-                    22,
-                    "Shock Wave"
-                ],
-                [
-                    29,
-                    "Ominous Wind"
-                ],
-                [
-                    36,
-                    "Substitute"
-                ],
-                [
-                    43,
-                    "Electro Ball"
-                ],
-                [
-                    50,
-                    "Hex"
-                ],
-                [
-                    57,
-                    "Charge"
-                ],
-                [
-                    64,
-                    "Discharge"
-                ]
-            ],
-            "tm_hm_learnset": [
-                "Toxic",
-                "Hidden Power",
-                "Sunny Day",
-                "Light Screen",
-                "Protect",
-                "Rain Dance",
-                "Telekinesis",
-                "Frustration",
-                "Thunderbolt",
-                "Thunder",
-                "Return",
-                "Shadow Ball",
-                "Double Team",
-                "Reflect",
-                "Facade",
-                "Rest",
-                "Thief",
-                "Round",
-                "Charge Beam",
-                "Will-O-Wisp",
-                "Flash",
-                "Volt Switch",
-                "Thunder Wave",
-                "Psych Up",
-                "Dream Eater",
-                "Swagger",
-                "Substitute"
-            ],
-            "tutor_learnset": [],
-            "egg_moves": [],
-            "evolution_family": []
-        },
-        "Giratina (Origin)": {
-            "rom_id": 658,
-            "species": "Giratina (Origin)",
-            "type_1": "Electric",
-            "type_2": "Water",
-            "base_stats": {
-                "hp": 50,
-                "attack": 65,
-                "defense": 107,
-                "speed": 86,
-                "special_attack": 105,
-                "special_defense": 107
-            },
-            "ev_yield": {
-                "hp": 0,
-                "attack": 0,
-                "defense": 0,
-                "speed": 1,
-                "special_attack": 1,
-                "special_defense": 0
-            },
-            "base_experience": 182,
-            "weight": 0.3,
-            "growth_rate": "Medium Fast",
-            "abilities": [
-                "Levitate"
-            ],
-            "level_up_learnset": [
-                [
-                    1,
-                    "Trick"
-                ],
-                [
-                    1,
-                    "Astonish"
-                ],
-                [
-                    1,
-                    "Thunder Wave"
-                ],
-                [
-                    1,
-                    "ThunderShock"
-                ],
-                [
-                    1,
-                    "Confuse Ray"
-                ],
-                [
-                    8,
-                    "Uproar"
-                ],
-                [
-                    15,
-                    "Double Team"
-                ],
-                [
-                    22,
-                    "Shock Wave"
-                ],
-                [
-                    29,
-                    "Ominous Wind"
-                ],
-                [
-                    36,
-                    "Substitute"
-                ],
-                [
-                    43,
-                    "Electro Ball"
-                ],
-                [
-                    50,
-                    "Hex"
-                ],
-                [
-                    57,
-                    "Charge"
-                ],
-                [
-                    64,
-                    "Discharge"
-                ]
-            ],
-            "tm_hm_learnset": [
-                "Toxic",
-                "Hidden Power",
-                "Sunny Day",
-                "Light Screen",
-                "Protect",
-                "Rain Dance",
-                "Telekinesis",
-                "Frustration",
-                "Thunderbolt",
-                "Thunder",
-                "Return",
-                "Shadow Ball",
-                "Double Team",
-                "Reflect",
-                "Facade",
-                "Rest",
-                "Thief",
-                "Round",
-                "Charge Beam",
-                "Will-O-Wisp",
-                "Flash",
-                "Volt Switch",
-                "Thunder Wave",
-                "Psych Up",
-                "Dream Eater",
-                "Swagger",
-                "Substitute"
-            ],
-            "tutor_learnset": [],
-            "egg_moves": [],
-            "evolution_family": []
-        },
         "Rotom (Heat)": {
             "rom_id": 659,
             "species": "Rotom (Heat)",
             "type_1": "Electric",
-            "type_2": "Ice",
+            "type_2": "Fire",
             "base_stats": {
                 "hp": 50,
                 "attack": 65,
@@ -434614,7 +434660,7 @@ const pokedexData = {
             "rom_id": 660,
             "species": "Rotom (Wash)",
             "type_1": "Electric",
-            "type_2": "Flying",
+            "type_2": "Water",
             "base_stats": {
                 "hp": 50,
                 "attack": 65,
@@ -434732,7 +434778,7 @@ const pokedexData = {
             "rom_id": 661,
             "species": "Rotom (Frost)",
             "type_1": "Electric",
-            "type_2": "Grass",
+            "type_2": "Ice",
             "base_stats": {
                 "hp": 50,
                 "attack": 65,
@@ -434849,112 +434895,114 @@ const pokedexData = {
         "Rotom (Fan)": {
             "rom_id": 662,
             "species": "Rotom (Fan)",
-            "type_1": "Fire",
-            "type_2": "Fire",
+            "type_1": "Electric",
+            "type_2": "Flying",
             "base_stats": {
-                "hp": 70,
-                "attack": 70,
-                "defense": 70,
-                "speed": 70,
-                "special_attack": 70,
-                "special_defense": 70
+                "hp": 50,
+                "attack": 65,
+                "defense": 107,
+                "speed": 86,
+                "special_attack": 105,
+                "special_defense": 107
             },
             "ev_yield": {
-                "hp": 1,
+                "hp": 0,
                 "attack": 0,
                 "defense": 0,
-                "speed": 0,
-                "special_attack": 0,
+                "speed": 1,
+                "special_attack": 1,
                 "special_defense": 0
             },
-            "base_experience": 147,
-            "weight": 0.8,
+            "base_experience": 182,
+            "weight": 0.3,
             "growth_rate": "Medium Fast",
             "abilities": [
-                "Forecast"
+                "Levitate"
             ],
             "level_up_learnset": [
                 [
                     1,
-                    "Tackle"
+                    "Trick"
                 ],
                 [
-                    10,
-                    "Water Gun"
+                    1,
+                    "Astonish"
                 ],
                 [
-                    10,
-                    "Ember"
+                    1,
+                    "Thunder Wave"
                 ],
                 [
-                    10,
-                    "Powder Snow"
+                    1,
+                    "ThunderShock"
                 ],
                 [
-                    20,
-                    "Headbutt"
+                    1,
+                    "Confuse Ray"
                 ],
                 [
-                    30,
-                    "Rain Dance"
+                    8,
+                    "Uproar"
                 ],
                 [
-                    30,
-                    "Sunny Day"
+                    15,
+                    "Double Team"
                 ],
                 [
-                    30,
-                    "Hail"
+                    22,
+                    "Shock Wave"
                 ],
                 [
-                    40,
-                    "Weather Ball"
+                    29,
+                    "Ominous Wind"
+                ],
+                [
+                    36,
+                    "Substitute"
+                ],
+                [
+                    43,
+                    "Electro Ball"
                 ],
                 [
                     50,
-                    "Hydro Pump"
+                    "Hex"
                 ],
                 [
-                    50,
-                    "Fire Blast"
+                    57,
+                    "Charge"
                 ],
                 [
-                    50,
-                    "Blizzard"
+                    64,
+                    "Discharge"
                 ]
             ],
             "tm_hm_learnset": [
                 "Toxic",
-                "Hail",
                 "Hidden Power",
                 "Sunny Day",
-                "Ice Beam",
-                "Blizzard",
+                "Light Screen",
                 "Protect",
                 "Rain Dance",
+                "Telekinesis",
                 "Frustration",
-                "SolarBeam",
                 "Thunderbolt",
                 "Thunder",
                 "Return",
                 "Shadow Ball",
                 "Double Team",
-                "Flamethrower",
-                "Sandstorm",
-                "Fire Blast",
+                "Reflect",
                 "Facade",
                 "Rest",
-                "Attract",
                 "Thief",
                 "Round",
-                "Energy Ball",
-                "Scald",
-                "Incinerate",
-                "Retaliate",
+                "Charge Beam",
+                "Will-O-Wisp",
                 "Flash",
+                "Volt Switch",
                 "Thunder Wave",
                 "Psych Up",
-                "Work Up",
+                "Dream Eater",
                 "Swagger",
                 "Substitute"
             ],
@@ -434965,112 +435013,114 @@ const pokedexData = {
         "Rotom (Mow)": {
             "rom_id": 663,
             "species": "Rotom (Mow)",
-            "type_1": "Water",
-            "type_2": "Water",
+            "type_1": "Electric",
+            "type_2": "Grass",
             "base_stats": {
-                "hp": 70,
-                "attack": 70,
-                "defense": 70,
-                "speed": 70,
-                "special_attack": 70,
-                "special_defense": 70
+                "hp": 50,
+                "attack": 65,
+                "defense": 107,
+                "speed": 86,
+                "special_attack": 105,
+                "special_defense": 107
             },
             "ev_yield": {
-                "hp": 1,
+                "hp": 0,
                 "attack": 0,
                 "defense": 0,
-                "speed": 0,
-                "special_attack": 0,
+                "speed": 1,
+                "special_attack": 1,
                 "special_defense": 0
             },
-            "base_experience": 147,
-            "weight": 0.8,
+            "base_experience": 182,
+            "weight": 0.3,
             "growth_rate": "Medium Fast",
             "abilities": [
-                "Forecast"
+                "Levitate"
             ],
             "level_up_learnset": [
                 [
                     1,
-                    "Tackle"
+                    "Trick"
                 ],
                 [
-                    10,
-                    "Water Gun"
+                    1,
+                    "Astonish"
                 ],
                 [
-                    10,
-                    "Ember"
+                    1,
+                    "Thunder Wave"
                 ],
                 [
-                    10,
-                    "Powder Snow"
+                    1,
+                    "ThunderShock"
                 ],
                 [
-                    20,
-                    "Headbutt"
+                    1,
+                    "Confuse Ray"
                 ],
                 [
-                    30,
-                    "Rain Dance"
+                    8,
+                    "Uproar"
                 ],
                 [
-                    30,
-                    "Sunny Day"
+                    15,
+                    "Double Team"
                 ],
                 [
-                    30,
-                    "Hail"
+                    22,
+                    "Shock Wave"
                 ],
                 [
-                    40,
-                    "Weather Ball"
+                    29,
+                    "Ominous Wind"
+                ],
+                [
+                    36,
+                    "Substitute"
+                ],
+                [
+                    43,
+                    "Electro Ball"
                 ],
                 [
                     50,
-                    "Hydro Pump"
+                    "Hex"
                 ],
                 [
-                    50,
-                    "Fire Blast"
+                    57,
+                    "Charge"
                 ],
                 [
-                    50,
-                    "Blizzard"
+                    64,
+                    "Discharge"
                 ]
             ],
             "tm_hm_learnset": [
                 "Toxic",
-                "Hail",
                 "Hidden Power",
                 "Sunny Day",
-                "Ice Beam",
-                "Blizzard",
+                "Light Screen",
                 "Protect",
                 "Rain Dance",
+                "Telekinesis",
                 "Frustration",
-                "SolarBeam",
                 "Thunderbolt",
                 "Thunder",
                 "Return",
                 "Shadow Ball",
                 "Double Team",
-                "Flamethrower",
-                "Sandstorm",
-                "Fire Blast",
+                "Reflect",
                 "Facade",
                 "Rest",
-                "Attract",
                 "Thief",
                 "Round",
-                "Energy Ball",
-                "Scald",
-                "Incinerate",
-                "Retaliate",
+                "Charge Beam",
+                "Will-O-Wisp",
                 "Flash",
+                "Volt Switch",
                 "Thunder Wave",
                 "Psych Up",
-                "Work Up",
+                "Dream Eater",
                 "Swagger",
                 "Substitute"
             ],
@@ -435081,8 +435131,8 @@ const pokedexData = {
         "Castform (Sunny)": {
             "rom_id": 664,
             "species": "Castform (Sunny)",
-            "type_1": "Ice",
-            "type_2": "Ice",
+            "type_1": "Fire",
+            "type_2": "Fire",
             "base_stats": {
                 "hp": 70,
                 "attack": 70,
@@ -435197,6 +435247,238 @@ const pokedexData = {
         "Castform (Rainy)": {
             "rom_id": 665,
             "species": "Castform (Rainy)",
+            "type_1": "Water",
+            "type_2": "Water",
+            "base_stats": {
+                "hp": 70,
+                "attack": 70,
+                "defense": 70,
+                "speed": 70,
+                "special_attack": 70,
+                "special_defense": 70
+            },
+            "ev_yield": {
+                "hp": 1,
+                "attack": 0,
+                "defense": 0,
+                "speed": 0,
+                "special_attack": 0,
+                "special_defense": 0
+            },
+            "base_experience": 147,
+            "weight": 0.8,
+            "growth_rate": "Medium Fast",
+            "abilities": [
+                "Forecast"
+            ],
+            "level_up_learnset": [
+                [
+                    1,
+                    "Tackle"
+                ],
+                [
+                    10,
+                    "Water Gun"
+                ],
+                [
+                    10,
+                    "Ember"
+                ],
+                [
+                    10,
+                    "Powder Snow"
+                ],
+                [
+                    20,
+                    "Headbutt"
+                ],
+                [
+                    30,
+                    "Rain Dance"
+                ],
+                [
+                    30,
+                    "Sunny Day"
+                ],
+                [
+                    30,
+                    "Hail"
+                ],
+                [
+                    40,
+                    "Weather Ball"
+                ],
+                [
+                    50,
+                    "Hydro Pump"
+                ],
+                [
+                    50,
+                    "Fire Blast"
+                ],
+                [
+                    50,
+                    "Blizzard"
+                ]
+            ],
+            "tm_hm_learnset": [
+                "Toxic",
+                "Hail",
+                "Hidden Power",
+                "Sunny Day",
+                "Ice Beam",
+                "Blizzard",
+                "Protect",
+                "Rain Dance",
+                "Frustration",
+                "SolarBeam",
+                "Thunderbolt",
+                "Thunder",
+                "Return",
+                "Shadow Ball",
+                "Double Team",
+                "Flamethrower",
+                "Sandstorm",
+                "Fire Blast",
+                "Facade",
+                "Rest",
+                "Attract",
+                "Thief",
+                "Round",
+                "Energy Ball",
+                "Scald",
+                "Incinerate",
+                "Retaliate",
+                "Flash",
+                "Thunder Wave",
+                "Psych Up",
+                "Work Up",
+                "Swagger",
+                "Substitute"
+            ],
+            "tutor_learnset": [],
+            "egg_moves": [],
+            "evolution_family": []
+        },
+        "Castform (Snowy)": {
+            "rom_id": 666,
+            "species": "Castform (Snowy)",
+            "type_1": "Ice",
+            "type_2": "Ice",
+            "base_stats": {
+                "hp": 70,
+                "attack": 70,
+                "defense": 70,
+                "speed": 70,
+                "special_attack": 70,
+                "special_defense": 70
+            },
+            "ev_yield": {
+                "hp": 1,
+                "attack": 0,
+                "defense": 0,
+                "speed": 0,
+                "special_attack": 0,
+                "special_defense": 0
+            },
+            "base_experience": 147,
+            "weight": 0.8,
+            "growth_rate": "Medium Fast",
+            "abilities": [
+                "Forecast"
+            ],
+            "level_up_learnset": [
+                [
+                    1,
+                    "Tackle"
+                ],
+                [
+                    10,
+                    "Water Gun"
+                ],
+                [
+                    10,
+                    "Ember"
+                ],
+                [
+                    10,
+                    "Powder Snow"
+                ],
+                [
+                    20,
+                    "Headbutt"
+                ],
+                [
+                    30,
+                    "Rain Dance"
+                ],
+                [
+                    30,
+                    "Sunny Day"
+                ],
+                [
+                    30,
+                    "Hail"
+                ],
+                [
+                    40,
+                    "Weather Ball"
+                ],
+                [
+                    50,
+                    "Hydro Pump"
+                ],
+                [
+                    50,
+                    "Fire Blast"
+                ],
+                [
+                    50,
+                    "Blizzard"
+                ]
+            ],
+            "tm_hm_learnset": [
+                "Toxic",
+                "Hail",
+                "Hidden Power",
+                "Sunny Day",
+                "Ice Beam",
+                "Blizzard",
+                "Protect",
+                "Rain Dance",
+                "Frustration",
+                "SolarBeam",
+                "Thunderbolt",
+                "Thunder",
+                "Return",
+                "Shadow Ball",
+                "Double Team",
+                "Flamethrower",
+                "Sandstorm",
+                "Fire Blast",
+                "Facade",
+                "Rest",
+                "Attract",
+                "Thief",
+                "Round",
+                "Energy Ball",
+                "Scald",
+                "Incinerate",
+                "Retaliate",
+                "Flash",
+                "Thunder Wave",
+                "Psych Up",
+                "Work Up",
+                "Swagger",
+                "Substitute"
+            ],
+            "tutor_learnset": [],
+            "egg_moves": [],
+            "evolution_family": []
+        },
+        "Basculin (Blue)": {
+            "rom_id": 667,
+            "species": "Basculin (Blue)",
             "type_1": "Water",
             "type_2": "Water",
             "base_stats": {
@@ -435316,9 +435598,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Castform (Snowy)": {
-            "rom_id": 666,
-            "species": "Castform (Snowy)",
+        "Darmanitan (Zen)": {
+            "rom_id": 668,
+            "species": "Darmanitan (Zen)",
             "type_1": "Fire",
             "type_2": "Psychic",
             "base_stats": {
@@ -435477,9 +435759,9 @@ const pokedexData = {
             "egg_moves": [],
             "evolution_family": []
         },
-        "Basculin (Blue)": {
-            "rom_id": 667,
-            "species": "Basculin (Blue)",
+        "Meloetta (Pirouette)": {
+            "rom_id": 669,
+            "species": "Meloetta (Pirouette)",
             "type_1": "Normal",
             "type_2": "Fighting",
             "base_stats": {

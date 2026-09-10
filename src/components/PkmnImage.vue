@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useGlobal, useWorkspace, useTierlist } from '../store';
-import { getPokemonPokedexId } from '../utils/pokemon/pokedex';
-import { getBaseSpeciesName, getFormNameForFile, getAlternativeMoveType, removeAlternativeMoveType, sanitizePokemonFileName, HYPHENATED_SPECIES } from '../utils/pokemon';
+import { resolvePokemonImagePath } from '../utils/pokemon/images';
+import { getBaseSpeciesName, getAlternativeMoveType, removeAlternativeMoveType } from '../utils/pokemon';
 
 const props = withDefaults(defineProps<{
     pokemon: string,
@@ -40,50 +40,12 @@ const settings = computed(() => {
 
 const imageError = ref(false);
 
-const imagePath = computed(() => {
-    const imageSource = tierlist.activeTierlist.imageSource;
-    // Remove alternative move type suffix before processing image path
-    let pokemonName = removeAlternativeMoveType(imageError.value ? getBaseSpeciesName(props.pokemon) : props.pokemon);
-    
-    // Handle regional forms (space-separated, e.g., "Alolan Marowak" -> "Alolan-Marowak")
-    const regionalPrefixes = ['Alolan', 'Galarian', 'Hisuian', 'Paldean'];
-    const isRegionalForm = regionalPrefixes.some(prefix => pokemonName.startsWith(prefix + ' '));
-    
-    if (isRegionalForm) {
-        // Convert all spaces to dashes for file naming: "Alolan Marowak" -> "Alolan-Marowak"
-        // Also handles "Paldean Tauros (Combat Breed)" -> "Paldean-Tauros-(Combat-Breed)"
-        pokemonName = pokemonName.replace(/\s+/g, '-');
-    } else if (!HYPHENATED_SPECIES.has(pokemonName)) {
-        // Handle regular dash-separated forms (e.g., "Deoxys-Attack")
-        // But exclude alternative move type suffixes which we already removed,
-        // and species whose name legitimately contains a hyphen (e.g. "Chi-Yu")
-        const dashIndex = pokemonName.indexOf('-');
-        if (dashIndex !== -1) {
-            const baseName = pokemonName.substring(0, dashIndex);
-            const formName = pokemonName.substring(dashIndex + 1);
-            const formNameForFile = getFormNameForFile(formName);
-            pokemonName = `${baseName}-${formNameForFile}`;
-        }
-    }
-    
-    // Normalize characters that can't appear in / don't match the on-disk filenames
-    // (accents like "Flabébé" -> "Flabebe", "Type: Null" -> "Type_Null").
-    // Keep the un-sanitized name for the Pokedex ID lookup, which expects the real species name.
-    const fileName = sanitizePokemonFileName(pokemonName);
-
-    if (imageSource) {
-        if (imageSource === 'yellow-sprites') {
-            const pokedexId = getPokemonPokedexId(tierlist.activeTierlist.game, pokemonName);
-            if (pokedexId) {
-                return `./images/${imageSource}/${pokedexId}.png`;
-            }
-            // Fallback to pokemon name if Pokedex ID not found
-            return `./images/${imageSource}/${fileName}.png`;
-        }
-        return `./images/${imageSource}/${fileName}.png`;
-    }
-    return `./images/pokemon_thumbnail/${fileName}.png`;
-});
+const imagePath = computed(() => resolvePokemonImagePath(
+    props.pokemon,
+    tierlist.activeTierlist.imageSource,
+    tierlist.activeTierlist.game,
+    imageError.value,
+));
 
 function onImageError() {
     // If form-specific image fails, try base species name

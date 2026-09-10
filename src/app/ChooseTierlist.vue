@@ -290,7 +290,7 @@ function getCartridgeColor(name: string): string {
     // Gen 6+ single-word / distinct games
     if (lowerName.includes('sword')) return 'sword';
     if (lowerName.includes('shield')) return 'shield';
-    if (lowerName.includes('scarlett')) return 'scarlett';
+    if (lowerName.includes('scarlet')) return 'scarlet';
     if (lowerName.includes('violet')) return 'violet';
     if (lowerName.includes('winds')) return 'winds';
     if (lowerName.includes('waves')) return 'waves';
