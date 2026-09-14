@@ -19,9 +19,12 @@ import { fileURLToPath } from 'url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..') + path.sep
 
-// pokedex-data.js is a plain script that assigns a global; index.html loads it via <script>.
+// The per-game pokedex files are plain scripts that register into window.pokedexData; the app
+// injects them on demand, here every section is preloaded so lookups are synchronous.
 ;(globalThis as any).window = globalThis
-;(0, eval)(fs.readFileSync(ROOT + 'public/data/pokedex-data.js', 'utf8'))
+for (const f of fs.readdirSync(ROOT + 'public/data/pokedex')) {
+  if (f.endsWith('.js')) (0, eval)(fs.readFileSync(ROOT + 'public/data/pokedex/' + f, 'utf8'))
+}
 
 const { pokemonNames } = await import('../src/utils/pokemon.ts')
 const { resolvePokemonImagePath } = await import('../src/utils/pokemon/images.ts')

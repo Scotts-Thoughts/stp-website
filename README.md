@@ -138,7 +138,7 @@ The "Don't remind me" preference resets when a newer version is published (e.g.,
 │   ├── store/             # Pinia stores (workspace, tierlist, global)
 │   └── utils/             # Helpers (file system, Pokemon data, time formatting)
 ├── public/
-│   ├── data/              # Pokemon data files (pokedex, version-specific)
+│   ├── data/pokedex/      # Per-game pokedex data, generated from Solodex (npm run sync-pokedex)
 │   └── images/            # Pokemon sprites, cartridge images, tier images
 ├── bundled-workspace/     # Generated default tierlists (built by generate-workspace)
 ├── scripts/               # Build scripts (generate-bundled-workspace.ts)

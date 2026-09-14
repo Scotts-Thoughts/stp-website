@@ -1050,6 +1050,7 @@ export const pokemonNames = [
     "Galarian Articuno",
     "Galarian Corsola",
     "Galarian Darmanitan",
+    "Galarian Darmanitan-Zen Mode",
     "Galarian Darumaka",
     "Galarian Farfetch'd",
     "Galarian Linoone",
@@ -1089,12 +1090,22 @@ export const pokemonNames = [
     // --- Alternate forms ---
     "Aegislash-Blade",
     "Aegislash-Shield",
+    "Basculegion-Female",
     "Basculin-Blue Striped",
     "Basculin-Red Striped",
+    "Basculin-White Striped",
+    "Burmy-Plant",
     "Burmy-Sandy",
     "Burmy-Trash",
+    "Calyrex-Ice Rider",
+    "Calyrex-Shadow Rider",
+    "Castform-Rainy",
+    "Castform-Snowy",
+    "Castform-Sunny",
     "Cherrim-Overcast",
     "Cherrim-Sunny",
+    "Cramorant-Gorging",
+    "Cramorant-Gulping",
     "Darmanitan-Standard Mode",
     "Darmanitan-Zen Mode",
     "Deerling-Autumn",
@@ -1105,26 +1116,86 @@ export const pokemonNames = [
     "Deoxys-Defense",
     "Deoxys-Normal",
     "Deoxys-Speed",
+    "Dialga-Origin",
+    "Dudunsparce-Three Segment",
+    "Eiscue-Ice Face",
+    "Eiscue-Noice Face",
+    "Enamorus-Incarnate",
+    "Enamorus-Therian",
+    "Eternatus-Eternamax",
+    "Floette-Eternal",
     "Furfrou-Diamond",
     "Furfrou-Heart",
     "Furfrou-Star",
     "Gastrodon-East",
     "Gastrodon-West",
+    "Gimmighoul-Roaming",
+    "Giratina-Altered",
     "Giratina-Origin",
-    "Greninja-Ask",
+    "Gourgeist-Average",
+    "Gourgeist-Large",
+    "Gourgeist-Small",
+    "Gourgeist-Super",
+    "Greninja-Ash",
+    "Greninja-Battle Bond",
+    "Hoopa-Confined",
     "Hoopa-Unbound",
+    "Indeedee-Female",
     "Keldeo-Ordinary",
     "Keldeo-Resolute",
     "Kyurem-Black",
     "Kyurem-White",
     "Landorus-Incarnate",
     "Landorus-Therian",
+    "Lycanroc-Dusk",
+    "Lycanroc-Midday",
+    "Lycanroc-Midnight",
+    "Magearna-Original",
+    "Maushold-Family of Three",
+    "Meloetta-Aria",
     "Meloetta-Pirouette",
+    "Meowstic-Female",
+    "Mimikyu-Busted",
+    "Mimikyu-Disguised",
+    "Minior-Core",
+    "Minior-Meteor",
     "Morpeko-Full Belly",
+    "Morpeko-Hangry",
+    "Necrozma-Dawn Wings",
+    "Necrozma-Dusk Mane",
+    "Necrozma-Ultra",
     "Ogerpon-Cornerstone Mask",
     "Ogerpon-Hearthflame Mask",
     "Ogerpon-Teal Mask",
     "Ogerpon-Wellspring Mask",
+    "Oinkologne-Female",
+    "Oricorio-Baile Style",
+    "Oricorio-Pa'u Style",
+    "Oricorio-Pom-Pom Style",
+    "Oricorio-Sensu Style",
+    "Palafin-Hero",
+    "Palkia-Origin",
+    "Pikachu-Alola Cap",
+    "Pikachu-Belle",
+    "Pikachu-Cosplay",
+    "Pikachu-Hoenn Cap",
+    "Pikachu-Kalos Cap",
+    "Pikachu-Libre",
+    "Pikachu-Original Cap",
+    "Pikachu-Partner Cap",
+    "Pikachu-PhD",
+    "Pikachu-Pop Star",
+    "Pikachu-Rock Star",
+    "Pikachu-Sinnoh Cap",
+    "Pikachu-Unova Cap",
+    "Pikachu-World Cap",
+    "Polteageist-Antique",
+    "Polteageist-Phony",
+    "Pumpkaboo-Average",
+    "Pumpkaboo-Large",
+    "Pumpkaboo-Small",
+    "Pumpkaboo-Super",
+    "Rockruff-Own Tempo",
     "Rotom-Fan",
     "Rotom-Frost",
     "Rotom-Heat",
@@ -1132,16 +1203,32 @@ export const pokemonNames = [
     "Rotom-Wash",
     "Sawsbuck-Autumn",
     "Sawsbuck-Spring",
+    "Sawsbuck-Summer",
     "Sawsbuck-Winter",
-    "Shaymin-sky",
+    "Shaymin-Land",
+    "Shaymin-Sky",
     "Shellos-East",
     "Shellos-West",
+    "Sinistea-Antique",
+    "Sinistea-Phony",
+    "Squawkabilly-Blue Plumage",
+    "Squawkabilly-Green Plumage",
+    "Squawkabilly-White Plumage",
+    "Squawkabilly-Yellow Plumage",
+    "Tatsugiri-Curly",
+    "Tatsugiri-Droopy",
+    "Tatsugiri-Stretchy",
+    "Terapagos-Normal",
+    "Terapagos-Stellar",
     "Terapagos-Terastal",
     "Thundurus-Incarnate",
     "Thundurus-Therian",
     "Tornadus-Incarnate",
     "Tornadus-Therian",
     "Toxtricity-Amped",
+    "Toxtricity-Low Key",
+    "Ursaluna-Bloodmoon",
+    "Urshifu-Rapid Strike",
     "Urshifu-Single Strike",
     "Vivillon-Archipelago",
     "Vivillon-Continental",
@@ -1163,8 +1250,20 @@ export const pokemonNames = [
     "Vivillon-Savanna",
     "Vivillon-Sun",
     "Vivillon-Tundra",
+    "Wishiwashi-School",
+    "Wishiwashi-Solo",
+    "Wormadam-Plant",
     "Wormadam-Sandy",
     "Wormadam-Trash",
+    "Zacian-Crowned",
+    "Zamazenta-Crowned",
+    "Zarude-Dada",
+    "Zygarde-10%",
+    "Zygarde-50%",
+    "Zygarde-Complete",
+    // --- Primal Reversions ---
+    "Primal Groudon",
+    "Primal Kyogre",
     // --- Mega Evolutions (includes romhack-only Megas for Winds / Waves) ---
     "Mega Abomasnow",
     "Mega Absol",
@@ -1288,12 +1387,175 @@ export const HYPHENATED_SPECIES = new Set([
 export const REGIONAL_PREFIXES = ['Alolan', 'Galarian', 'Hisuian', 'Paldean'] as const;
 
 /**
+ * Selectable forms per base species, shown in the Form dropdown of the insert windows.
+ *
+ * An entry that repeats the species name ("Rotom", "Kyurem", ...) means "the base form"
+ * and resolves to the plain species name. Everything else is combined with the species
+ * by buildFormName. Regional forms are just the prefix ("Alolan").
+ */
+export const POKEMON_FORMS: Record<string, string[]> = {
+    // Gen 1-2
+    "Pikachu": ["Pikachu", "Original Cap", "Hoenn Cap", "Sinnoh Cap", "Unova Cap", "Kalos Cap", "Alola Cap", "Partner Cap", "World Cap", "Cosplay", "Rock Star", "Belle", "Pop Star", "PhD", "Libre"],
+    // Gen 3
+    "Castform": ["Castform", "Sunny", "Rainy", "Snowy"],
+    "Deoxys": ["Normal", "Attack", "Defense", "Speed"],
+    "Groudon": ["Groudon", "Primal"],
+    "Kyogre": ["Kyogre", "Primal"],
+    // Gen 4
+    "Burmy": ["Plant", "Sandy", "Trash"],
+    "Wormadam": ["Plant", "Sandy", "Trash"],
+    "Cherrim": ["Overcast", "Sunny"],
+    "Shellos": ["West", "East"],
+    "Gastrodon": ["West", "East"],
+    "Rotom": ["Rotom", "Heat", "Wash", "Frost", "Fan", "Mow"],
+    "Dialga": ["Dialga", "Origin"],
+    "Palkia": ["Palkia", "Origin"],
+    "Giratina": ["Altered", "Origin"],
+    "Shaymin": ["Land", "Sky"],
+    // Gen 5
+    "Basculin": ["Red Striped", "Blue Striped", "White Striped"],
+    "Darmanitan": ["Standard Mode", "Zen Mode", "Galarian", "Galarian Zen Mode"],
+    "Deerling": ["Spring", "Summer", "Autumn", "Winter"],
+    "Sawsbuck": ["Spring", "Summer", "Autumn", "Winter"],
+    "Tornadus": ["Incarnate", "Therian"],
+    "Thundurus": ["Incarnate", "Therian"],
+    "Landorus": ["Incarnate", "Therian"],
+    "Kyurem": ["Kyurem", "White", "Black"],
+    "Keldeo": ["Ordinary", "Resolute"],
+    "Meloetta": ["Aria", "Pirouette"],
+    // Gen 6
+    "Greninja": ["Greninja", "Battle Bond", "Ash"],
+    "Vivillon": ["Meadow", "Archipelago", "Continental", "Elegant", "Fancy", "Garden", "High Plains", "Icy Snow", "Jungle", "Marine", "Modern", "Monsoon", "Ocean", "Poke Ball", "Polar", "River", "Sandstorm", "Savanna", "Sun", "Tundra"],
+    "Floette": ["Floette", "Eternal"],
+    "Furfrou": ["Furfrou", "Heart", "Star", "Diamond"],
+    "Meowstic": ["Meowstic", "Female"],
+    "Aegislash": ["Shield", "Blade"],
+    "Pumpkaboo": ["Average", "Small", "Large", "Super"],
+    "Gourgeist": ["Average", "Small", "Large", "Super"],
+    "Zygarde": ["50%", "10%", "Complete"],
+    "Hoopa": ["Confined", "Unbound"],
+    // Gen 7
+    "Oricorio": ["Baile Style", "Pom-Pom Style", "Pa'u Style", "Sensu Style"],
+    "Rockruff": ["Rockruff", "Own Tempo"],
+    "Lycanroc": ["Midday", "Midnight", "Dusk"],
+    "Wishiwashi": ["Solo", "School"],
+    "Minior": ["Meteor", "Core"],
+    "Mimikyu": ["Disguised", "Busted"],
+    "Necrozma": ["Necrozma", "Dusk Mane", "Dawn Wings", "Ultra"],
+    "Magearna": ["Magearna", "Original"],
+    // Gen 8
+    "Cramorant": ["Cramorant", "Gulping", "Gorging"],
+    "Toxtricity": ["Amped", "Low Key"],
+    "Sinistea": ["Sinistea", "Phony", "Antique"],
+    "Polteageist": ["Polteageist", "Phony", "Antique"],
+    "Eiscue": ["Ice Face", "Noice Face"],
+    "Indeedee": ["Indeedee", "Female"],
+    "Morpeko": ["Full Belly", "Hangry"],
+    "Zacian": ["Zacian", "Crowned"],
+    "Zamazenta": ["Zamazenta", "Crowned"],
+    "Eternatus": ["Eternatus", "Eternamax"],
+    "Urshifu": ["Single Strike", "Rapid Strike"],
+    "Zarude": ["Zarude", "Dada"],
+    "Calyrex": ["Calyrex", "Ice Rider", "Shadow Rider"],
+    "Basculegion": ["Basculegion", "Female"],
+    "Enamorus": ["Incarnate", "Therian"],
+    "Ursaluna": ["Ursaluna", "Bloodmoon"],
+    // Gen 9
+    "Oinkologne": ["Oinkologne", "Female"],
+    "Maushold": ["Maushold", "Family of Three"],
+    "Squawkabilly": ["Green Plumage", "Blue Plumage", "Yellow Plumage", "White Plumage"],
+    "Palafin": ["Palafin", "Hero"],
+    "Tatsugiri": ["Curly", "Droopy", "Stretchy"],
+    "Dudunsparce": ["Dudunsparce", "Three Segment"],
+    "Gimmighoul": ["Gimmighoul", "Roaming"],
+    "Ogerpon": ["Teal Mask", "Wellspring Mask", "Hearthflame Mask", "Cornerstone Mask"],
+    "Terapagos": ["Normal", "Terastal", "Stellar"],
+    // Alolan forms
+    "Rattata": ["Alolan"],
+    "Raticate": ["Alolan"],
+    "Raichu": ["Alolan"],
+    "Sandshrew": ["Alolan"],
+    "Sandslash": ["Alolan"],
+    "Vulpix": ["Alolan"],
+    "Ninetales": ["Alolan"],
+    "Diglett": ["Alolan"],
+    "Dugtrio": ["Alolan"],
+    "Meowth": ["Alolan", "Galarian"],
+    "Persian": ["Alolan"],
+    "Geodude": ["Alolan"],
+    "Graveler": ["Alolan"],
+    "Golem": ["Alolan"],
+    "Grimer": ["Alolan"],
+    "Muk": ["Alolan"],
+    "Exeggutor": ["Alolan"],
+    "Marowak": ["Alolan"],
+    // Galarian forms
+    "Ponyta": ["Galarian"],
+    "Rapidash": ["Galarian"],
+    "Slowpoke": ["Galarian"],
+    "Slowbro": ["Galarian"],
+    "Farfetch'd": ["Galarian"],
+    "Weezing": ["Galarian"],
+    "Mr. Mime": ["Galarian"],
+    "Articuno": ["Galarian"],
+    "Zapdos": ["Galarian"],
+    "Moltres": ["Galarian"],
+    "Slowking": ["Galarian"],
+    "Corsola": ["Galarian"],
+    "Zigzagoon": ["Galarian"],
+    "Linoone": ["Galarian"],
+    "Darumaka": ["Galarian"],
+    "Yamask": ["Galarian"],
+    "Stunfisk": ["Galarian"],
+    // Hisuian forms
+    "Growlithe": ["Hisuian"],
+    "Arcanine": ["Hisuian"],
+    "Voltorb": ["Hisuian"],
+    "Electrode": ["Hisuian"],
+    "Typhlosion": ["Hisuian"],
+    "Qwilfish": ["Hisuian"],
+    "Sneasel": ["Hisuian"],
+    "Samurott": ["Hisuian"],
+    "Lilligant": ["Hisuian"],
+    "Zorua": ["Hisuian"],
+    "Zoroark": ["Hisuian"],
+    "Braviary": ["Hisuian"],
+    "Sliggoo": ["Hisuian"],
+    "Goodra": ["Hisuian"],
+    "Avalugg": ["Hisuian"],
+    "Decidueye": ["Hisuian"],
+    // Paldean forms
+    "Tauros": ["Combat Breed", "Blaze Breed", "Aqua Breed"],
+    "Wooper": ["Paldean"],
+};
+
+/**
+ * Builds the display name stored in a tierlist from a base species and one of its
+ * POKEMON_FORMS entries. Every naming rule the app relies on lives here so the insert
+ * windows, images and pokedex lookups agree:
+ * - the species itself as a form           -> "Rotom"
+ * - regional prefix                        -> "Alolan Marowak"
+ * - Primal                                 -> "Primal Groudon"
+ * - Paldean Tauros breeds                  -> "Paldean Tauros (Combat Breed)"
+ * - Galarian Darmanitan's Zen Mode         -> "Galarian Darmanitan-Zen Mode"
+ * - anything else                          -> "Deoxys-Attack"
+ */
+export function buildFormName(base: string, form: string): string {
+    if (!form || form === base) return base;
+    if (form === 'Primal') return `Primal ${base}`;
+    if (base === 'Tauros' && form.endsWith(' Breed')) return `Paldean Tauros (${form})`;
+    if (base === 'Darmanitan' && form === 'Galarian Zen Mode') return 'Galarian Darmanitan-Zen Mode';
+    if (REGIONAL_PREFIXES.some(prefix => form === prefix)) return `${form} ${base}`;
+    return `${base}-${form}`;
+}
+
+/**
  * Extracts the base species name from a Pokemon name that may include a form.
  * Examples:
  * - "Deoxys-Attack" -> "Deoxys"
  * - "Deoxys-Defense" -> "Deoxys"
  * - "Alolan Marowak" -> "Marowak"
- * - "Greninja-Ask" -> "Greninja"
+ * - "Greninja-Ash" -> "Greninja"
  * - "Pikachu" -> "Pikachu" (no form)
  */
 export function getBaseSpeciesName(pokemonName: string): string {
@@ -1302,7 +1564,7 @@ export function getBaseSpeciesName(pokemonName: string): string {
         return pokemonName;
     }
 
-    // Handle dash-separated forms (e.g., "Deoxys-Attack", "Greninja-Ask")
+    // Handle dash-separated forms (e.g., "Deoxys-Attack", "Greninja-Ash")
     const dashIndex = pokemonName.indexOf('-');
     if (dashIndex !== -1) {
         return pokemonName.substring(0, dashIndex);
@@ -1336,7 +1598,7 @@ export function getBaseSpeciesName(pokemonName: string): string {
  * - "East" -> "East" (stays capitalized for Shellos/Gastrodon)
  * - "Amped" -> "Amped" (stays capitalized for Toxtricity)
  * - "Dusk Mane" -> "dusk-mane" (spaces become dashes, lowercase)
- * - "10%" -> "10%" (special characters preserved, lowercase)
+ * - "10%" -> "10%" (sanitizePokemonFileName drops the "%" afterwards)
  */
 export function getFormNameForFile(formName: string): string {
     // Forms that should stay capitalized (matching existing file names)
@@ -1369,6 +1631,7 @@ export function getFormNameForFile(formName: string): string {
  * - Strips diacritics so "Flabébé" matches "Flabebe.png"
  * - Collapses a colon + following whitespace into an underscore so
  *   "Type: Null" matches "Type_Null.png" (":" is an illegal filename char on Windows)
+ * - Drops "%" so "Zygarde-10%" matches "Zygarde-10.png" ("%" starts an escape in a URL)
  *
  * Note: spaces are intentionally left alone — most multi-word names use spaces in
  * their filenames (e.g. "Iron Hands.png", "Flutter Mane.png").
@@ -1377,7 +1640,8 @@ export function sanitizePokemonFileName(name: string): string {
     return name
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '')  // strip diacritics (é -> e)
-        .replace(/:\s*/g, '_');          // "Type: Null" -> "Type_Null"
+        .replace(/:\s*/g, '_')           // "Type: Null" -> "Type_Null"
+        .replace(/%/g, '');              // "Zygarde-10%" -> "Zygarde-10" ('%' starts an escape in a URL)
 }
 
 /**

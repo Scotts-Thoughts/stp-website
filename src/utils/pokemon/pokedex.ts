@@ -1,52 +1,107 @@
-// global declaration for pokedex data (public/data/pokedex-data.js)
-// pokedexData is loaded globally via script tag in index.html
-declare const pokedexData: Record<string, Record<string, {
-    type_1: string
-    type_2: string
-    growth_rate: string
-    national_dex_number?: number
-}>>;
+import { ref } from 'vue';
+import { getBaseSpeciesName } from '../pokemon';
 
-type PokedexEntry = {
+/**
+ * One entry of a per-game pokedex file. The data carries far more (base stats, learnsets,
+ * abilities, evolution family, ...) — see public/data/pokedex/ — but this is all the app
+ * reads today. Widen the type as features start using more of it.
+ */
+export type PokedexEntry = {
+    species: string
     type_1: string
     type_2: string
     growth_rate: string
     national_dex_number?: number
 }
 
-import { getBaseSpeciesName } from '../pokemon';
+type PokedexSection = Record<string, PokedexEntry>;
 
-// Access pokedexData from global scope (loaded via script tag)
-// The script attaches pokedexData to window for ES module access
-function getPokedexData(): Record<string, Record<string, PokedexEntry>> | undefined {
-    // Try accessing via window first (script attaches it there)
-    if (typeof window !== 'undefined' && (window as any).pokedexData) {
-        return (window as any).pokedexData;
-    }
-    // Fallback: try accessing via globalThis
-    if (typeof globalThis !== 'undefined' && (globalThis as any).pokedexData) {
-        return (globalThis as any).pokedexData;
-    }
-    // Last resort: try direct access (may work in some contexts)
-    try {
-        // @ts-ignore - pokedexData is declared globally via script tag
-        if (typeof pokedexData !== 'undefined') {
-            // @ts-ignore
-            return pokedexData;
-        }
-    } catch (e) {
-        // Not accessible directly
-    }
-    return undefined;
+/**
+ * Data lives in public/data/pokedex/<file>.js, one classic script per game that assigns
+ * `window.pokedexData[<key>]`. The files are generated from the Solodex dataset by
+ * scripts/sync-pokedex-data.ts (`npm run sync-pokedex`); never edit them by hand.
+ *
+ * Keys are the Solodex game names. Order is release order: getPokemonData walks forward
+ * through it when a species is missing from a game, and the Mega Evolution dex comes last
+ * so every game can fall through to it.
+ */
+export const POKEDEX_FILES: Record<string, string> = {
+    "Red and Blue": "red_blue",
+    "Yellow": "yellow",
+    "Gold and Silver": "gold_silver",
+    "Crystal": "crystal",
+    "Ruby and Sapphire": "ruby_sapphire",
+    "Emerald": "emerald",
+    "FireRed and LeafGreen": "firered_leafgreen",
+    "Diamond and Pearl": "diamond_pearl",
+    "Platinum": "platinum",
+    "HeartGold and SoulSilver": "heartgold_soulsilver",
+    "Black and White": "black_white",
+    "Black 2 and White 2": "black2_white2",
+    "X and Y": "x_y",
+    "Omega Ruby and Alpha Sapphire": "omega_ruby_alpha_sapphire",
+    "Sun and Moon": "sun_moon",
+    "Ultra Sun and Ultra Moon": "ultra_sun_ultra_moon",
+    "Sword and Shield": "sword_shield",
+    "Brilliant Diamond and Shining Pearl": "brilliant_diamond_shining_pearl",
+    "Legends Arceus": "legends_arceus",
+    "Scarlet and Violet": "scarlet_violet",
+    "Legends Z-A": "legends_za",
+    "Mega Evolutions": "mega_evolution_pokedex",
+};
+
+const gameListReleaseOrder = Object.keys(POKEDEX_FILES);
+
+/** Where the per-game scripts register themselves. Scripts (verify, sync) set window = globalThis. */
+function getPokedexData(): Record<string, PokedexSection> | undefined {
+    const g = globalThis as any;
+    return (typeof window !== 'undefined' && (window as any).pokedexData) || g.pokedexData;
 }
 
 /**
- * Maps a tierlist game name to the key it is stored under in pokedex-data.js.
+ * Bumped every time a section finishes loading. getPokemonData / hasPokedexData read it, so
+ * any Vue computed that called them re-evaluates once the data it asked for has arrived.
+ */
+const pokedexVersion = ref(0);
+const sectionLoads = new Map<string, Promise<void>>();
+
+/**
+ * Loads one game's pokedex file on demand by injecting a <script> tag — that works from the
+ * dev server, a plain web build and Electron's file:// pages alike (module imports and
+ * fetch() do not). Resolves once the section is registered (or has failed; a failure is
+ * logged and not retried). No-op outside a browser, where scripts preload the files via eval.
+ */
+export function loadPokedexSection(key: string): Promise<void> {
+    const file = POKEDEX_FILES[key];
+    if (!file || getPokedexData()?.[key]) return Promise.resolve();
+    let pending = sectionLoads.get(key);
+    if (pending) return pending;
+    if (typeof document === 'undefined') return Promise.resolve();
+    pending = new Promise<void>(resolve => {
+        const script = document.createElement('script');
+        script.src = `./data/pokedex/${file}.js`;
+        script.async = true;
+        script.onload = () => { pokedexVersion.value++; resolve(); };
+        script.onerror = () => { console.error(`Failed to load pokedex data for "${key}" (${script.src})`); resolve(); };
+        document.head.appendChild(script);
+    });
+    sectionLoads.set(key, pending);
+    return pending;
+}
+
+/** Kicks off loading the data a tierlist for this game needs, so filters don't flicker later. */
+export function preloadPokedex(game: string): void {
+    const key = mapGameNameToPokedexKey(game);
+    if (key) void loadPokedexSection(key);
+}
+
+/**
+ * Maps a tierlist game name to its POKEDEX_FILES key.
  *
  * Every entry of TIERLIST_GAMES must appear here, plus the alternate spellings that
  * already exist in saved tierlists ("Japanese Green", "Black2", "Red and Blue", ...).
- * Games with no data in pokedex-data.js (Gen 6 onwards, the remakes and the romhacks)
- * are deliberately absent — getPokemonData returns null for those rather than throwing.
+ * Games with no data (Let's Go and the romhacks) are deliberately absent — getPokemonData
+ * returns null for those rather than throwing.
  */
 const GAME_TO_POKEDEX_KEY: Record<string, string> = {
     // Gen 1
@@ -78,41 +133,65 @@ const GAME_TO_POKEDEX_KEY: Record<string, string> = {
     "HeartGold": "HeartGold and SoulSilver",
     "SoulSilver": "HeartGold and SoulSilver",
     "HeartGold and SoulSilver": "HeartGold and SoulSilver",
-    // Gen 5 — one shared dex for BW and B2W2
-    "Black": "Black and White and Black2 and White2",
-    "White": "Black and White and Black2 and White2",
-    "Black 2": "Black and White and Black2 and White2",
-    "White 2": "Black and White and Black2 and White2",
-    "Black2": "Black and White and Black2 and White2",
-    "White2": "Black and White and Black2 and White2",
-    "Black and White and Black2 and White2": "Black and White and Black2 and White2",
+    // Gen 5
+    "Black": "Black and White",
+    "White": "Black and White",
+    "Black and White": "Black and White",
+    "Black 2": "Black 2 and White 2",
+    "White 2": "Black 2 and White 2",
+    "Black2": "Black 2 and White 2",
+    "White2": "Black 2 and White 2",
+    "Black 2 and White 2": "Black 2 and White 2",
+    "Black and White and Black2 and White2": "Black 2 and White 2", // key of the retired combined file
+    // Gen 6
+    "X": "X and Y",
+    "Y": "X and Y",
+    "X and Y": "X and Y",
+    "Omega Ruby": "Omega Ruby and Alpha Sapphire",
+    "Alpha Sapphire": "Omega Ruby and Alpha Sapphire",
+    "Omega Ruby and Alpha Sapphire": "Omega Ruby and Alpha Sapphire",
+    // Gen 7
+    "Sun": "Sun and Moon",
+    "Moon": "Sun and Moon",
+    "Sun and Moon": "Sun and Moon",
+    "Ultra Sun": "Ultra Sun and Ultra Moon",
+    "Ultra Moon": "Ultra Sun and Ultra Moon",
+    "Ultra Sun and Ultra Moon": "Ultra Sun and Ultra Moon",
+    // Gen 8
+    "Sword": "Sword and Shield",
+    "Shield": "Sword and Shield",
+    "Sword and Shield": "Sword and Shield",
+    "Brilliant Diamond": "Brilliant Diamond and Shining Pearl",
+    "Shining Pearl": "Brilliant Diamond and Shining Pearl",
+    "Brilliant Diamond and Shining Pearl": "Brilliant Diamond and Shining Pearl",
+    "Legends Arceus": "Legends Arceus",
+    "Legends: Arceus": "Legends Arceus",
+    // Gen 9
+    "Scarlet": "Scarlet and Violet",
+    "Violet": "Scarlet and Violet",
+    "Scarlett": "Scarlet and Violet", // tierlists saved before the spelling was corrected
+    "Scarlet and Violet": "Scarlet and Violet",
+    "Legends Z-A": "Legends Z-A",
+    "Legends: Z-A": "Legends Z-A",
 };
 
 function mapGameNameToPokedexKey(game: string): string | undefined {
     return GAME_TO_POKEDEX_KEY[game];
 }
 
-/** True when pokedex-data.js has a section for this game at all. */
+/**
+ * True once this game's pokedex section is loaded. A known-but-unloaded game starts
+ * loading and reports false for now; callers that gate a filter on this let everything
+ * through until the reactive re-run, which is preferable to an empty tierlist.
+ */
 export function hasPokedexData(game: string): boolean {
+    void pokedexVersion.value;
     const key = mapGameNameToPokedexKey(game);
     if (!key) return false;
-    const data = getPokedexData();
-    return !!data && !!data[key];
+    if (getPokedexData()?.[key]) return true;
+    void loadPokedexSection(key);
+    return false;
 }
-
-const gameListReleaseOrder = [
-    "Red and Blue",
-    "Yellow",
-    "Gold and Silver",
-    "Crystal",
-    "Ruby and Sapphire",
-    "Emerald",
-    "FireRed and LeafGreen",
-    "Diamond and Pearl",
-    "Platinum",
-    "HeartGold and SoulSilver",
-    "Black and White and Black2 and White2",
-];
 
 /**
  * Collapses a species name to a comparison key, so the many spellings the app and the
@@ -146,7 +225,29 @@ function normalizeSpeciesKey(name: string): string {
  * "Darmanitan-Zen Mode" and "Basculin-Blue Striped". Stripped as whole words only, so
  * a species name that merely contains the letters is never damaged.
  */
-const FORM_FILLER_WORDS = new Set(['mode', 'form', 'forme', 'striped', 'cloak', 'sea', 'belly', 'style']);
+const FORM_FILLER_WORDS = new Set([
+    'mode', 'form', 'forme', 'striped', 'cloak', 'sea', 'belly', 'style',
+    'rider',  // "Calyrex-Ice Rider"    -> "Calyrex (Ice)"
+    'face',   // "Eiscue-Noice Face"    -> "Eiscue (Noice)"
+    'mane',   // "Necrozma-Dusk Mane"   -> "Necrozma (Dusk)"
+    'wings',  // "Necrozma-Dawn Wings"  -> "Necrozma (Dawn)"
+]);
+
+/**
+ * Display names whose data key cannot be reached by normalizing alone, because the
+ * data files order or spell the form differently. Checked before any normalized match.
+ */
+const DATA_KEY_ALIASES: Record<string, string> = {
+    'Mega Absol Z': 'Absol (Mega Z)',
+    'Mega Garchomp Z': 'Garchomp (Mega Z)',
+    'Mega Lucario Z': 'Lucario (Mega Z)',
+    'Galarian Darmanitan': 'Darmanitan (Galar Standard)',
+    'Galarian Darmanitan-Zen Mode': 'Darmanitan (Galar Zen)',
+    'Paldean Tauros (Combat Breed)': 'Tauros (Paldea Combat Breed)',
+    'Paldean Tauros (Blaze Breed)': 'Tauros (Paldea Blaze Breed)',
+    'Paldean Tauros (Aqua Breed)': 'Tauros (Paldea Aqua Breed)',
+    'Minior-Core': 'Minior (Red)',  // every Core colour shares one stat line
+};
 
 /** normalizeSpeciesKey, with filler form-words removed, or '' when nothing was dropped. */
 function normalizeSpeciesKeyLoose(name: string): string {
@@ -188,37 +289,47 @@ function getNormalizedIndex(gameKey: string, section: Record<string, PokedexEntr
  * Looks up a Pokemon's data for a game, falling forward through later generations when
  * the species did not exist yet in that game's data.
  *
- * Returns null when the species cannot be found, or when the game has no pokedex data
- * at all (Gen 6 onwards). It never throws — callers run inside Vue computeds, where a
- * throw takes the whole view down.
+ * Returns null when the species cannot be found, when the game has no pokedex data at
+ * all (Let's Go, romhacks), or while a section it needs is still loading — in that case
+ * the load is started and the reactive version bump re-runs the calling computed later.
+ * It never throws — callers run inside Vue computeds, where a throw takes the whole view
+ * down.
  */
 export function getPokemonData(game: string, pokemonName: string): PokedexEntry | null {
-    const data = getPokedexData();
-    if (!data) return null;
-
+    void pokedexVersion.value;
     const pokedexKey = mapGameNameToPokedexKey(game);
-    if (!pokedexKey || !data[pokedexKey]) return null;
+    if (!pokedexKey) return null;
 
     const index = gameListReleaseOrder.indexOf(pokedexKey);
     if (index === -1) return null;
 
     // Try the full name first so a form ("Deoxys-Attack") beats the base species, then
-    // fall back to the base species for forms the data does not break out.
+    // fall back to the base species for forms the data does not break out. An aliased
+    // data key goes ahead of both, and the base of a regional form is aliased too.
     const baseName = getBaseSpeciesName(pokemonName);
-    const lookupNames = baseName === pokemonName ? [pokemonName] : [pokemonName, baseName];
+    const lookupNames: string[] = [];
+    for (const name of baseName === pokemonName ? [pokemonName] : [pokemonName, baseName]) {
+        const alias = DATA_KEY_ALIASES[name];
+        if (alias) lookupNames.push(alias);
+        lookupNames.push(name);
+    }
 
-    for (let i = index; i < gameListReleaseOrder.length; i++) {
-        const currentGame = gameListReleaseOrder[i];
-        const currentPokedex = data[currentGame];
-        if (!currentPokedex) continue;
-        const normalized = getNormalizedIndex(currentGame, currentPokedex);
-
-        // Resolve the full name (form included) completely before falling back to the base
-        // species, otherwise "Rotom-Heat" would match the plain "Rotom" entry and never
-        // reach "Rotom (Heat)".
-        for (const name of lookupNames) {
+    // Exhaust each name across every game before trying the next, so a form that this
+    // game's data lacks ("Shaymin-Sky" in Diamond) still finds "Shaymin (Sky)" in Platinum
+    // instead of stopping at the plain "Shaymin" entry.
+    for (const name of lookupNames) {
+        for (let i = index; i < gameListReleaseOrder.length; i++) {
+            const currentGame = gameListReleaseOrder[i];
+            const currentPokedex = getPokedexData()?.[currentGame];
+            if (!currentPokedex) {
+                // Not loaded yet: start it and give up for now rather than skipping ahead to
+                // a later game, which could hand back a different generation's stats.
+                void loadPokedexSection(currentGame);
+                return null;
+            }
             const entry = currentPokedex[name];
             if (entry) return entry;
+            const normalized = getNormalizedIndex(currentGame, currentPokedex);
             const key = normalized.get(normalizeSpeciesKey(name));
             if (key) return currentPokedex[key];
             const loose = normalizeSpeciesKeyLoose(name);

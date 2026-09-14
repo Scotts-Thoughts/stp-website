@@ -5,7 +5,7 @@ import { useWorkspace } from ".";
 import { useGlobal } from "./global";
 import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } from "../utils/time"
 
-import { getPokemonData, hasPokedexData } from "../utils/pokemon/pokedex";
+import { getPokemonData, hasPokedexData, preloadPokedex } from "../utils/pokemon/pokedex";
 
 export type Tierlist = {
     filename: string
@@ -208,6 +208,12 @@ export const useTierlist = defineStore("tierlist", () => {
         activeStateId.value = '';
         restrictSpecies.value = null;
     });
+
+    // Pokedex data loads per game on demand; start it as soon as a tierlist is opened so
+    // the type / growth-rate filters and Yellow sprites have it by the time they're used.
+    watch(() => workspace.activeTierlist.game, (game) => {
+        if (game) preloadPokedex(game);
+    }, { immediate: true });
 
 
     const filterByType = (pokemonName: string) => {

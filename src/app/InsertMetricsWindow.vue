@@ -2,100 +2,9 @@
 import { ref, watch, computed } from 'vue';
 import Window from '../components/Window.vue'
 
-import { pokemonNames, getBaseSpeciesName, appendAlternativeMoveType } from '../utils/pokemon'
+import { pokemonNames, getBaseSpeciesName, appendAlternativeMoveType, POKEMON_FORMS, buildFormName } from '../utils/pokemon'
 import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
 import { currentDate, parseDate, parseTime, parseGameTime } from '../utils/time';
-
-// Regional form prefixes
-const REGIONAL_PREFIXES = ['Alolan', 'Galarian', 'Hisuian', 'Paldean'];
-
-// Define Pokemon forms mapping
-const pokemonForms: Record<string, string[]> = {
-    // Regular forms
-    "Deoxys": ["Normal", "Attack", "Defense", "Speed"],
-    "Giratina": ["Altered", "Origin"],
-    "Shaymin": ["Land", "Sky"],
-    "Rotom": ["Rotom", "Heat", "Wash", "Frost", "Fan", "Mow"],
-    "Shellos": ["West", "East"],
-    "Gastrodon": ["West", "East"],
-    "Basculin": ["Red-Striped", "Blue-Striped", "White-Striped"],
-    "Tornadus": ["Incarnate", "Therian"],
-    "Thundurus": ["Incarnate", "Therian"],
-    "Landorus": ["Incarnate", "Therian"],
-    "Enamorus": ["Incarnate", "Therian"],
-    "Kyurem": ["Kyurem", "White", "Black"],
-    "Keldeo": ["Ordinary", "Resolute"],
-    "Meloetta": ["Aria", "Pirouette"],
-    "Zygarde": ["10%", "50%", "100%"],
-    "Hoopa": ["Confined", "Unbound"],
-    "Oricorio": ["Baile Style", "Pom-Pom Style", "Pa'u Style", "Sensu Style"],
-    "Lycanroc": ["Midday", "Midnight", "Dusk"],
-    "Wishiwashi": ["Solo", "School"],
-    "Necrozma": ["Necrozma", "Dusk Mane", "Dawn Wings", "Ultra"],
-    "Toxtricity": ["Amped", "Low Key"],
-    "Sinistea": ["Sinistea", "Phony", "Antique"],
-    "Polteageist": ["Polteageist", "Phony", "Antique"],
-    "Ursaluna": ["Ursaluna", "Bloodmoon"],
-    // Alolan Forms
-    "Rattata": ["Alolan"],
-    "Raticate": ["Alolan"],
-    "Raichu": ["Alolan"],
-    "Sandshrew": ["Alolan"],
-    "Sandslash": ["Alolan"],
-    "Vulpix": ["Alolan"],
-    "Ninetales": ["Alolan"],
-    "Diglett": ["Alolan"],
-    "Dugtrio": ["Alolan"],
-    "Meowth": ["Alolan", "Galarian"],
-    "Persian": ["Alolan"],
-    "Geodude": ["Alolan"],
-    "Graveler": ["Alolan"],
-    "Golem": ["Alolan"],
-    "Grimer": ["Alolan"],
-    "Muk": ["Alolan"],
-    "Exeggutor": ["Alolan"],
-    "Marowak": ["Alolan"],
-    // Galarian Forms
-    "Ponyta": ["Galarian"],
-    "Rapidash": ["Galarian"],
-    "Slowpoke": ["Galarian"],
-    "Slowbro": ["Galarian"],
-    "Farfetch'd": ["Galarian"],
-    "Weezing": ["Galarian"],
-    "Mr. Mime": ["Galarian"],
-    "Articuno": ["Galarian"],
-    "Zapdos": ["Galarian"],
-    "Moltres": ["Galarian"],
-    "Slowking": ["Galarian"],
-    "Corsola": ["Galarian"],
-    "Zigzagoon": ["Galarian"],
-    "Linoone": ["Galarian"],
-    "Darumaka": ["Galarian"],
-    "Darmanitan": ["Standard Mode", "Zen Mode", "Galarian"],
-    "Yamask": ["Galarian"],
-    "Stunfisk": ["Galarian"],
-    // Hisuian Forms
-    "Growlithe": ["Hisuian"],
-    "Arcanine": ["Hisuian"],
-    "Voltorb": ["Hisuian"],
-    "Electrode": ["Hisuian"],
-    "Typhlosion": ["Hisuian"],
-    "Qwilfish": ["Hisuian"],
-    "Sneasel": ["Hisuian"],
-    "Samurott": ["Hisuian"],
-    "Lilligant": ["Hisuian"],
-    "Zorua": ["Hisuian"],
-    "Zoroark": ["Hisuian"],
-    "Braviary": ["Hisuian"],
-    "Sliggoo": ["Hisuian"],
-    "Goodra": ["Hisuian"],
-    "Avalugg": ["Hisuian"],
-    "Decidueye": ["Hisuian"],
-    // Paldean Forms
-    "Tauros": ["Combat Breed", "Blaze Breed", "Aqua Breed"],
-    "Wooper": ["Paldean"],
-};
-
 
 const props = defineProps<{
     visible: boolean
@@ -138,7 +47,7 @@ const basePokemonNames = computed(() => {
         // Filter out forms that are already in the list
         const baseName = getBaseSpeciesName(name);
         // Only include if it's the base name or if it's not in our forms mapping
-        return name === baseName || !pokemonForms[baseName];
+        return name === baseName || !POKEMON_FORMS[baseName];
     });
 });
 
@@ -183,7 +92,7 @@ function onPokemonSearchInput() {
 // Get available forms for the selected Pokemon
 const availableForms = computed(() => {
     if (!pokemon.value) return [];
-    return pokemonForms[pokemon.value] || [];
+    return POKEMON_FORMS[pokemon.value] || [];
 });
 
 // Check if the selected Pokemon has forms
@@ -196,26 +105,7 @@ const finalPokemonName = computed(() => {
     if (!pokemon.value) return "";
     let name = "";
     if (pokemonForm.value && hasForms.value) {
-        // Some species list themselves as one of their own forms (Kyurem, Rotom,
-        // Necrozma, Sinistea, ...). That option means "the base form", so it must
-        // resolve to the plain species name rather than "Kyurem-Kyurem".
-        if (pokemonForm.value === pokemon.value) {
-            name = pokemon.value;
-        }
-        // Special case for Paldean Tauros breeds
-        else if (pokemon.value === "Tauros" && (pokemonForm.value === "Combat Breed" || pokemonForm.value === "Blaze Breed" || pokemonForm.value === "Aqua Breed")) {
-            name = `Paldean ${pokemon.value} (${pokemonForm.value})`;
-        } else {
-            // Check if this is a regional form (starts with Alolan, Galarian, Hisuian, or Paldean)
-            const isRegionalForm = REGIONAL_PREFIXES.some(prefix => pokemonForm.value.startsWith(prefix));
-            if (isRegionalForm) {
-                // Regional forms use space-separated format: "Alolan Marowak"
-                name = `${pokemonForm.value} ${pokemon.value}`;
-            } else {
-                // Regular forms use dash-separated format: "Deoxys-Attack"
-                name = `${pokemon.value}-${pokemonForm.value}`;
-            }
-        }
+        name = buildFormName(pokemon.value, pokemonForm.value);
     } else {
         name = pokemon.value;
     }
