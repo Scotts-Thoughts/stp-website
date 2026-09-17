@@ -57,6 +57,20 @@ contextBridge.exposeInMainWorld('electronWatch', {
     ipcRenderer.invoke('watch:checkNow'),
 })
 
+// Expose video export API — frames are streamed as raw RGBA straight into FFmpeg
+contextBridge.exposeInMainWorld('electronVideo', {
+  beginStream: (outputPath: string, fps: number, width: number, height: number, lossless?: boolean): Promise<{ id?: string; error?: string }> =>
+    ipcRenderer.invoke('video:beginStream', outputPath, fps, width, height, lossless),
+  writeFrame: (id: string, data: Uint8Array): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('video:writeFrame', id, data),
+  endStream: (id: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('video:endStream', id),
+  abortStream: (id: string): Promise<void> =>
+    ipcRenderer.invoke('video:abortStream', id),
+  saveFileDialog: (defaultName: string): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:saveFileDialog', defaultName),
+})
+
 // Expose the YouTube Production Scheduler's project list (read-only) so captured
 // tierlist "states" can be named after the episode being produced.
 contextBridge.exposeInMainWorld('electronScheduler', {

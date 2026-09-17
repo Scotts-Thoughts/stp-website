@@ -7,6 +7,8 @@ import CameraAutomateWindow from './CameraAutomateWindow.vue';
 import { useContextMenu, useTierlist, useFileExporter, useGlobal, useReranking, useWorkspace, useToast, RerankPhase, METRIC, CreditMode } from '../store';
 import { hasAlternativeMoveType } from '../utils/pokemon';
 import * as htmlToImage from 'html-to-image';
+import { FrameCompositor, VideoStream, nextFrame } from '../utils/frame-compositor';
+import { buildCaptureOpts, buildFontEmbedCSS } from '../utils/video-recorder';
 
 const tierlist = useTierlist();
 const fileexporter = useFileExporter();
@@ -1129,44 +1131,13 @@ async function recordSequence() {
     if (spriteSizeFrameId) { cancelAnimationFrame(spriteSizeFrameId); spriteSizeFrameId = null; }
 
     const FPS = 60;
-    const tmpDir = await video.createTempDir();
 
-    // Pre-build font CSS for html-to-image
-    let fontEmbedCSS = '';
-    try {
-        const base = import.meta.env.BASE_URL || '/';
-        const fontFiles = [
-            { family: 'Teko', url: `${base}fonts/Teko-Bold.ttf` },
-            { family: 'play', url: `${base}fonts/Play-Bold.ttf` },
-            { family: 'oseb', url: `${base}fonts/OpenSans-ExtraBold.ttf` },
-            { family: 'osb', url: `${base}fonts/Play-Bold.ttf` },
-            { family: 'titan', url: `${base}fonts/TitanOne-Regular.ttf` },
-        ];
-        const promises = fontFiles.map(async ({ family, url }) => {
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            const dataUrl = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-            return `@font-face { font-family: '${family}'; src: url(${dataUrl}) format('truetype'); }`;
-        });
-        fontEmbedCSS = (await Promise.all(promises)).join('\n');
-    } catch { /* fallback */ }
-
-    const captureOpts = {
-        backgroundColor: 'transparent' as string,
-        cacheBust: false,
-        pixelRatio: 1,
-        skipFonts: true,
-        // Keep the on-screen recording / playback overlays out of the captured frames.
-        filter: (node: Node) => {
-            const cl = (node as HTMLElement).classList;
-            return !cl || !(cl.contains('recording-overlay') || cl.contains('playing-indicator') || cl.contains('countdown-overlay'));
-        },
-        ...(fontEmbedCSS ? { fontEmbedCSS } : { skipFonts: false, preferredFontFormat: 'truetype' as const }),
+    // Keep the on-screen recording / playback overlays out of the captured frames.
+    const overlayFilter = (node: Node) => {
+        const cl = (node as HTMLElement).classList;
+        return !cl || !(cl.contains('recording-overlay') || cl.contains('playing-indicator') || cl.contains('countdown-overlay'));
     };
+    const captureOpts = { ...buildCaptureOpts(await buildFontEmbedCSS()), filter: overlayFilter };
 
     // Compute total duration and build step timeline
     const stepTimeline: Array<{ startMs: number; endMs: number; step: CameraSequenceStep }> = [];
@@ -1249,9 +1220,96 @@ async function recordSequence() {
         return { vMin: currentMin, vMax: currentMax };
     }
 
+    let stream: VideoStream | null = null;
     try {
         const el = containerRef.value;
         if (!el) throw new Error('Container not found');
+
+        // --- Frame painter ---
+        // The timeline is re-laid out by Vue every frame (viewport → positions); painting it
+        // with html-to-image each time re-rasterizes every sprite + outline filter. Instead,
+        // everything that only *moves* between frames is rasterized once into the compositor's
+        // sprite sheet and blitted at its live rect each frame:
+        //   - Pokémon sprites, keyed per size bucket (see spriteOpts);
+        //   - threshold lines, keyed by their text + label state (color / opacity / bottom);
+        //   - tick marks, keyed by their label text (which only changes with the zoom level).
+        // Connector lines and axis segments are plain boxes and are drawn natively. Only the
+        // outlier bubbles (which hold a sprite AND text) still go through html-to-image, per
+        // frame, when present — via a node filter, which is safe here since every top-level
+        // element is absolutely positioned.
+        //
+        // Z-order: threshold lines (5) / axis (7) / connectors (8) / ticks (9) / sprites (20) /
+        // outlier bubbles (30).
+        const comp = new FrameCompositor(el, captureOpts);
+        const topLevelOf = (node: Node): Element | null => {
+            let n: Node | null = node;
+            while (n && n.parentNode !== el) n = n.parentNode;
+            return n as Element | null;
+        };
+        const has = (n: Element | null, cls: string) => !!n?.classList?.contains(cls);
+        const aboveFilter = (node: Node) => overlayFilter(node) && has(topLevelOf(node), 'outlier-bubble');
+
+        // Chrome elements' look is fully described by their text plus the inline styles Vue
+        // binds on their children (colors, label opacity / bottom) — not by their own inline
+        // `left`, which is position only.
+        const chromeOpts = {
+            fixSize: true,
+            keepChildren: true,
+            key: (chromeEl: HTMLElement) =>
+                chromeEl.className + '|' + chromeEl.innerText + '|' +
+                [...chromeEl.querySelectorAll<HTMLElement>('*')].map(ch => ch.className + '=' + ch.getAttribute('style')).join(';'),
+        };
+
+        // Sprite size is smoothed per frame (fractional px). Rasterize the sheet at the exact
+        // size once it has settled on an integer, and in 8px buckets while it's in motion
+        // (drawn scaled to the live size — each sheet costs ~0.7s, and a ≤4px rescale is invisible in motion).
+        const spriteOpts = {
+            maxHeight: (sprite: HTMLElement) => {
+                const v = parseFloat(sprite.style.getPropertyValue('--max-height'));
+                if (!Number.isFinite(v)) return undefined;
+                const rounded = Math.round(v);
+                const size = Math.abs(v - rounded) < 0.05 ? rounded : Math.round(v / 8) * 8;
+                return size + 'px';
+            },
+        };
+
+        // Plain-rectangle chrome: connector lines, and the axis segments (clipped to the axis
+        // container's overflow:hidden box).
+        function drawBoxes(selector: string, clipTo?: HTMLElement) {
+            const frame = comp.rootFrame();
+            const clip = clipTo ? comp.localRect(clipTo.getBoundingClientRect(), frame) : null;
+            for (const box of el!.querySelectorAll<HTMLElement>(selector)) {
+                const cs = getComputedStyle(box);
+                let r = comp.localRect(box.getBoundingClientRect(), frame);
+                if (clip) {
+                    const x1 = Math.max(r.x, clip.x), y1 = Math.max(r.y, clip.y);
+                    const x2 = Math.min(r.x + r.w, clip.x + clip.w), y2 = Math.min(r.y + r.h, clip.y + clip.h);
+                    r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+                }
+                comp.fillRect(r.x, r.y, r.w, r.h, cs.backgroundColor, parseFloat(cs.opacity));
+            }
+        }
+
+        async function paintFrame(): Promise<void> {
+            const sprites = [...el!.querySelectorAll<HTMLElement>('.timeline-sprite')];
+            const thresholds = [...el!.querySelectorAll<HTMLElement>('.threshold-line')];
+            const ticks = [...el!.querySelectorAll<HTMLElement>('.tick-mark')];
+            await comp.ensureSprites(sprites, spriteOpts);
+            await comp.ensureSprites(thresholds, chromeOpts);
+            await comp.ensureSprites(ticks, chromeOpts);
+
+            comp.clear();
+            comp.drawSprites(thresholds, chromeOpts);
+            drawBoxes('.axis-segment', el!.querySelector<HTMLElement>('.axis-line-container') ?? undefined);
+            drawBoxes('.connector-line');
+            comp.drawSprites(ticks, chromeOpts);
+            comp.drawSprites(sprites, spriteOpts);
+
+            if (el!.querySelector('.outlier-bubble')) {
+                comp.drawLayer(await comp.captureLayer({ filter: aboveFilter }));
+            }
+            await stream!.write(comp.pixels());
+        }
 
         // --- Export each keyframe snapshot as a still PNG next to the .mov (best-effort) ---
         try {
@@ -1266,7 +1324,7 @@ async function recordSequence() {
                 _recordSmoothInit = false;
                 updateRecordSmoothing();
                 await nextTick();
-                await new Promise(r => requestAnimationFrame(r));
+                await nextFrame();
 
                 const dataUrl = await htmlToImage.toPng(el, captureOpts);
                 const safeName = snap.name.replace(/[^a-z0-9_-]+/gi, '_');
@@ -1277,6 +1335,8 @@ async function recordSequence() {
         }
         // Re-arm the snap so the first animation frame also starts settled.
         _recordSmoothInit = false;
+
+        stream = await VideoStream.begin(video, outputPath, FPS, comp.width, comp.height, false);
 
         for (let frame = 0; frame <= totalFrames; frame++) {
             if (recordingCancelled) break;
@@ -1294,10 +1354,9 @@ async function recordSequence() {
             // template apply it before capturing.
             updateRecordSmoothing();
             await nextTick();
-            await new Promise(r => requestAnimationFrame(r));
+            await nextFrame();
 
-            const dataUrl = await htmlToImage.toPng(el, captureOpts);
-            await video.saveFrame(tmpDir, frame, dataUrl);
+            await paintFrame();
         }
 
         // --- Settle tail ---
@@ -1310,28 +1369,27 @@ async function recordSequence() {
             applyViewport(finalView.vMin, finalView.vMax);
             recordingProgress.value = { current: totalFrames, total: totalFrames, message: 'Settling final frame…' };
 
-            let frameIdx = totalFrames + 1;
             const maxSettleFrames = Math.ceil(FPS); // hard cap ~1s so we never spin forever
             for (let s = 0; s < maxSettleFrames && !recordingCancelled; s++) {
                 await nextTick();
                 await nextTick();
                 const remaining = updateRecordSmoothing();
                 await nextTick();
-                await new Promise(r => requestAnimationFrame(r));
+                await nextFrame();
 
-                const dataUrl = await htmlToImage.toPng(el, captureOpts);
-                await video.saveFrame(tmpDir, frameIdx++, dataUrl);
+                await paintFrame();
 
                 if (remaining < 0.5) break; // settled (sub-pixel) — final frame is at rest
             }
         }
 
-        if (!recordingCancelled) {
-            recordingProgress.value = { current: totalFrames, total: totalFrames, message: 'Encoding video with FFmpeg...' };
-            const result = await video.encode(tmpDir, outputPath, FPS);
+        if (recordingCancelled) {
+            await stream.abort();
+        } else {
+            recordingProgress.value = { current: totalFrames, total: totalFrames, message: 'Finishing video...' };
+            const result = await stream.end();
             if (!result.success) {
                 recordingProgress.value = { current: 0, total: 0, message: `FFmpeg error: ${result.error}` };
-                await video.cleanup(tmpDir);
                 _inPlayback = false;
                 _inRecording = false;
                 recordSmoothY.value = new Map();
@@ -1342,11 +1400,9 @@ async function recordSequence() {
             }
             recordingProgress.value = { current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` };
         }
-
-        await video.cleanup(tmpDir);
     } catch (e) {
         recordingProgress.value = { current: 0, total: 0, message: `Error: ${String(e)}` };
-        try { await video.cleanup(tmpDir); } catch { /* ignore */ }
+        if (stream) await stream.abort();
     }
 
     _inPlayback = false;

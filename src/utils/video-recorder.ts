@@ -1,4 +1,4 @@
-import * as htmlToImage from 'html-to-image';
+import { FrameCompositor, VideoStream, nextFrame, type CaptureOpts } from './frame-compositor';
 
 const FPS = 60;
 
@@ -10,7 +10,7 @@ export type RecordingProgress = {
 };
 
 /** Build embedded base64 @font-face CSS so html-to-image renders the correct fonts. */
-async function buildFontEmbedCSS(): Promise<string> {
+export async function buildFontEmbedCSS(): Promise<string> {
     try {
         const base = import.meta.env.BASE_URL || '/';
         const fontFiles = [
@@ -37,7 +37,7 @@ async function buildFontEmbedCSS(): Promise<string> {
 }
 
 /** Shared html-to-image options for transparent-background frame capture. */
-function buildCaptureOpts(fontEmbedCSS: string) {
+export function buildCaptureOpts(fontEmbedCSS: string): CaptureOpts {
     return {
         backgroundColor: 'transparent' as string,
         cacheBust: false,
@@ -45,6 +45,49 @@ function buildCaptureOpts(fontEmbedCSS: string) {
         skipFonts: true,
         ...(fontEmbedCSS ? { fontEmbedCSS } : { skipFonts: false, preferredFontFormat: 'truetype' as const }),
     };
+}
+
+/** Selector for the tierlist chrome that is painted ABOVE the sprites (edge fades, labels). */
+const TIER_OVERLAYS = '.fade-left, .fade-right, .threshold-label';
+const SPRITES = '[data-pokemon]';
+
+function easeInOut(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Progress reporter that coalesces the per-frame "Capturing frame N/M" spam to ~10 updates a
+ * second (each update re-renders a toast), while always delivering phase changes and the
+ * final frame.
+ */
+function makeProgress(onProgress: (p: RecordingProgress) => void) {
+    let last = 0;
+    let lastPhase = '';
+    return (p: RecordingProgress) => {
+        const now = performance.now();
+        const force = p.phase !== lastPhase || p.current === p.total || p.phase !== 'capturing';
+        if (!force && now - last < 100) return;
+        last = now;
+        lastPhase = p.phase;
+        onProgress(p);
+    };
+}
+
+/**
+ * Let the browser paint every few frames so the on-screen animation and the progress toast
+ * stay alive while the capture loop runs flat out.
+ */
+async function maybeYield(frame: number): Promise<void> {
+    if (frame % 4 === 0) await nextFrame();
+}
+
+/** Split "C:\dir\file.mov" into { folder, fileBase } (no extension). */
+function splitOutputPath(outputPath: string): { folder: string; fileBase: string } {
+    const sep = outputPath.includes('\\') ? '\\' : '/';
+    const lastSep = outputPath.lastIndexOf(sep);
+    const folder = lastSep >= 0 ? outputPath.slice(0, lastSep) : '';
+    const fileBase = (lastSep >= 0 ? outputPath.slice(lastSep + 1) : outputPath).replace(/\.mov$/i, '');
+    return { folder, fileBase };
 }
 
 /**
@@ -57,6 +100,10 @@ function buildCaptureOpts(fontEmbedCSS: string) {
  *   2.0 – 3.0  Open       (marginRight + scaleX, neighbors slide out)
  *   3.0 – 3.6  Fade in    (opacity 0 → 1)
  *   3.42– 4.4  Highlight  (glow pulse, starts at 70% of fade-in)
+ *
+ * The DOM is animated exactly as before; frames are painted by the FrameCompositor (static
+ * chrome captured once per layout, sprites blitted from a sprite sheet at their live rects)
+ * and streamed to FFmpeg as they're produced.
  */
 export async function recordRerankingAnimation(opts: {
     wrapperEl: HTMLElement;
@@ -74,10 +121,18 @@ export async function recordRerankingAnimation(opts: {
     const outputPath = await video.saveFileDialog('reranking.mov');
     if (!outputPath) return false;
 
-    const tmpDir = await video.createTempDir();
+    const progress = makeProgress(opts.onProgress);
+    const wrapperEl = opts.wrapperEl;
 
-    // Pre-build font CSS + capture options for html-to-image
+    // Render the root at its natural 1920x1080 by neutralizing the viewport-scale transform
+    // (`.wrapper.exporting`), so the live rects the compositor reads are in frame pixels.
+    const hadExporting = wrapperEl.classList.contains('exporting');
+    if (!hadExporting) wrapperEl.classList.add('exporting');
+
     const captureOpts = buildCaptureOpts(await buildFontEmbedCSS());
+    const comp = new FrameCompositor(wrapperEl, captureOpts);
+    const sprites = () => [...wrapperEl.querySelectorAll<HTMLElement>(SPRITES)];
+    const overlays = () => [...wrapperEl.querySelectorAll<HTMLElement>(TIER_OVERLAYS)];
 
     // Timeline
     const FADE_OUT_END  = 1.0;
@@ -86,29 +141,61 @@ export async function recordRerankingAnimation(opts: {
     const FADE_IN_END   = 3.6;
     const HIGHLIGHT_END = 4.4;
 
-
     const totalFrames = Math.ceil(HIGHLIGHT_END * FPS);
-    let frameIndex = 0;
     let dataApplied = false;
     let naturalWidth = 0;
     let newElMarginLeft = 0;
     const siblingCompensations: { el: HTMLElement; offset: number }[] = [];
 
-    function easeInOut(t: number): number {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    let stream: VideoStream | null = null;
+    let below: HTMLCanvasElement | null = null;
+    let above: HTMLCanvasElement | null = null;
+
+    // (Re)capture the static layers + any sprites the sheet doesn't have yet.
+    async function captureLayers() {
+        await comp.ensureSprites(sprites());
+        below = await comp.captureLayer({ hide: [...sprites(), ...overlays()] });
+        above = await comp.captureLayer({ only: overlays() });
     }
 
+    // Filter is animated per frame in the highlight phase; `.parent` has `transition: filter`
+    // which would otherwise make the computed value lag behind what we just set.
+    const noTransition = (el: HTMLElement | null) => { if (el) el.style.transition = 'none'; };
+
+    // Reset only what the animation touched — NOT `cssText = ''`, which would also wipe the
+    // per-Pokémon CSS variables Vue set inline (--max-height, --scale, ...) and leave the
+    // sprite mis-sized until its next re-render.
+    const ANIM_PROPS = ['opacity', 'overflow', 'flex-shrink', 'margin-right', 'margin-left', 'transform', 'transform-origin', 'filter', 'transition'];
+    // `overflow: hidden` turns a flex item's `min-width: auto` into 0, so in an overflowing
+    // (scrollable) row the entry would shrink to zero width on top of its negative margin and
+    // the neighbours would jump instead of sliding. Pin the width while the entry is collapsed.
+    const collapseBox = (el: HTMLElement) => { el.style.overflow = 'hidden'; el.style.flexShrink = '0'; };
+    const clearAnimStyles = (el: HTMLElement | null) => { if (el) for (const p of ANIM_PROPS) el.style.removeProperty(p); };
+
+    const restore = () => {
+        clearAnimStyles(opts.findOldEl());
+        clearAnimStyles(opts.findNewEl());
+        for (const c of siblingCompensations) c.el.style.transform = '';
+        if (!hadExporting) wrapperEl.classList.remove('exporting');
+    };
+
     try {
+        progress({ phase: 'capturing', current: 0, total: totalFrames, message: 'Preparing frames...' });
+        await nextFrame();
+        stream = await VideoStream.begin(video, outputPath, FPS, comp.width, comp.height, false);
+        noTransition(opts.findOldEl());
+        await captureLayers();
+
         for (let f = 0; f <= totalFrames; f++) {
             const t = f / FPS;
-            opts.onProgress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
+            progress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
 
             // ── Phase 1: Fade out ──
             if (t < FADE_OUT_END) {
                 const el = opts.findOldEl();
                 if (el) {
-                    const progress = easeInOut(t / FADE_OUT_END);
-                    el.style.opacity = String(1 - progress);
+                    const p = easeInOut(t / FADE_OUT_END);
+                    el.style.opacity = String(1 - p);
                 }
 
             // ── Phase 2: Collapse (close the old spot) ──
@@ -119,10 +206,10 @@ export async function recordRerankingAnimation(opts: {
                         naturalWidth = el.getBoundingClientRect().width;
                     }
                     el.style.opacity = '0';
-                    el.style.overflow = 'hidden';
-                    const progress = easeInOut((t - FADE_OUT_END) / (COLLAPSE_END - FADE_OUT_END));
-                    el.style.marginRight = (-naturalWidth * progress) + 'px';
-                    el.style.transform = `scaleX(${1 - progress})`;
+                    collapseBox(el);
+                    const p = easeInOut((t - FADE_OUT_END) / (COLLAPSE_END - FADE_OUT_END));
+                    el.style.marginRight = (-naturalWidth * p) + 'px';
+                    el.style.transform = `scaleX(${1 - p})`;
                     el.style.transformOrigin = 'left center';
                 }
 
@@ -130,7 +217,7 @@ export async function recordRerankingAnimation(opts: {
             } else if (!dataApplied) {
                 // Snapshot sibling positions before data swap
                 const preSwapPositions = new Map<Element, number>();
-                for (const row of opts.wrapperEl.querySelectorAll('.entry-row')) {
+                for (const row of wrapperEl.querySelectorAll('.entry-row')) {
                     for (const child of row.children) {
                         if ((child as HTMLElement).dataset?.pokemon) {
                             preSwapPositions.set(child, (child as HTMLElement).offsetLeft);
@@ -145,12 +232,13 @@ export async function recordRerankingAnimation(opts: {
 
                 const newEl = opts.findNewEl();
                 if (newEl) {
+                    noTransition(newEl);
                     naturalWidth = newEl.getBoundingClientRect().width;
                     newElMarginLeft = parseFloat(getComputedStyle(newEl).marginLeft) || 0;
 
                     // Collapse with marginLeft zeroed so element takes zero space
                     newEl.style.opacity = '0';
-                    newEl.style.overflow = 'hidden';
+                    collapseBox(newEl);
                     newEl.style.marginRight = (-naturalWidth) + 'px';
                     newEl.style.marginLeft = '0';
                     newEl.style.transform = 'scaleX(0)';
@@ -173,21 +261,25 @@ export async function recordRerankingAnimation(opts: {
                         }
                     }
                 }
+
+                // The data swap re-lays out the tierlist (counts, fades, rows) — recapture the
+                // static layers, and pick up the moved entry if it's new to the sheet.
+                await captureLayers();
             }
 
             // ── Phase 3: Open (make room at new spot) ──
             if (dataApplied && t < OPEN_END) {
                 const newEl = opts.findNewEl();
                 if (newEl) {
-                    const progress = easeInOut((t - COLLAPSE_END) / (OPEN_END - COLLAPSE_END));
+                    const p = easeInOut((t - COLLAPSE_END) / (OPEN_END - COLLAPSE_END));
                     newEl.style.opacity = '0';
-                    newEl.style.overflow = 'hidden';
-                    newEl.style.marginRight = (-naturalWidth * (1 - progress)) + 'px';
-                    newEl.style.marginLeft = (newElMarginLeft * progress) + 'px';
-                    newEl.style.transform = `scaleX(${progress})`;
+                    collapseBox(newEl);
+                    newEl.style.marginRight = (-naturalWidth * (1 - p)) + 'px';
+                    newEl.style.marginLeft = (newElMarginLeft * p) + 'px';
+                    newEl.style.transform = `scaleX(${p})`;
                     newEl.style.transformOrigin = 'left center';
                     for (const c of siblingCompensations) {
-                        c.el.style.transform = `translateX(${c.offset * (1 - progress)}px)`;
+                        c.el.style.transform = `translateX(${c.offset * (1 - p)}px)`;
                     }
                 }
 
@@ -199,12 +291,13 @@ export async function recordRerankingAnimation(opts: {
                     newEl.style.marginLeft = '';
                     newEl.style.transform = '';
                     newEl.style.overflow = '';
+                    newEl.style.flexShrink = '';
                     if (siblingCompensations.length > 0) {
                         for (const c of siblingCompensations) c.el.style.transform = '';
                         siblingCompensations.length = 0;
                     }
-                    const progress = easeInOut((t - OPEN_END) / (FADE_IN_END - OPEN_END));
-                    newEl.style.opacity = String(progress);
+                    const p = easeInOut((t - OPEN_END) / (FADE_IN_END - OPEN_END));
+                    newEl.style.opacity = String(p);
                 }
 
             // ── Phase 5: Highlight glow ──
@@ -212,8 +305,8 @@ export async function recordRerankingAnimation(opts: {
                 const newEl = opts.findNewEl();
                 if (newEl) {
                     newEl.style.opacity = '1';
-                    const progress = (t - FADE_IN_END) / (HIGHLIGHT_END - FADE_IN_END);
-                    const glow = progress < 0.3 ? progress / 0.3 : 1 - ((progress - 0.3) / 0.7);
+                    const p = (t - FADE_IN_END) / (HIGHLIGHT_END - FADE_IN_END);
+                    const glow = p < 0.3 ? p / 0.3 : 1 - ((p - 0.3) / 0.7);
                     const brightness = 1 + glow * 0.6;
                     const shadow = glow * 14;
                     newEl.style.filter = `brightness(${brightness}) drop-shadow(0 0 ${shadow}px rgba(255, 215, 0, ${glow * 0.85}))`;
@@ -222,39 +315,36 @@ export async function recordRerankingAnimation(opts: {
             // ── Cleanup ──
             } else if (dataApplied) {
                 const newEl = opts.findNewEl();
-                if (newEl) newEl.style.cssText = '';
+                if (newEl) {
+                    clearAnimStyles(newEl);
+                    noTransition(newEl);
+                }
             }
 
-            await nextFrame();
-            const dataUrl = await htmlToImage.toPng(opts.wrapperEl, captureOpts);
-            await video.saveFrame(tmpDir, frameIndex, dataUrl);
-            frameIndex++;
+            comp.clear();
+            comp.drawLayer(below!);
+            comp.drawSprites(sprites());
+            comp.drawLayer(above!);
+            await stream.write(comp.pixels());
+            await maybeYield(f);
         }
 
-        const cleanEl = opts.findNewEl();
-        if (cleanEl) cleanEl.style.cssText = '';
+        restore();
 
-        opts.onProgress({ phase: 'encoding', current: 0, total: 1, message: 'Encoding video with FFmpeg...' });
-        const result = await video.encode(tmpDir, outputPath, FPS);
-
+        progress({ phase: 'encoding', current: 0, total: 1, message: 'Finishing video...' });
+        const result = await stream.end();
         if (!result.success) {
-            opts.onProgress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
-            await video.cleanup(tmpDir);
+            progress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
             return false;
         }
 
-        opts.onProgress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
-        await video.cleanup(tmpDir);
+        progress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
         return true;
 
     } catch (e) {
-        opts.onProgress({ phase: 'error', current: 0, total: 0, message: String(e) });
-        try { await video.cleanup(tmpDir); } catch { /* ignore */ }
-        const el1 = opts.findOldEl();
-        const el2 = opts.findNewEl();
-        if (el1) el1.style.cssText = '';
-        if (el2) el2.style.cssText = '';
-        for (const c of siblingCompensations) c.el.style.transform = '';
+        progress({ phase: 'error', current: 0, total: 0, message: String(e) });
+        if (stream) await stream.abort();
+        restore();
         return false;
     }
 }
@@ -263,10 +353,10 @@ export async function recordRerankingAnimation(opts: {
  * Record a horizontal scroll animation of a single tier as a transparent .mov file,
  * and save a PNG of the start and end states alongside it.
  *
- * html-to-image does not preserve live `scrollLeft`, so the scroll is driven by a negative
- * `margin-left` on the row's first flex child (which shifts the whole flex row left and is
- * clipped by the row's overflow — visually identical to scrolling). The custom overlay
- * scrollbar + left edge-fade are hidden by adding the `exporting` class during capture.
+ * The scroll is driven by a negative `margin-left` on the row's first flex child (which shifts
+ * the whole flex row left and is clipped by the row's overflow — visually identical to
+ * scrolling) so the live edge-fade logic stays out of it. The custom overlay scrollbar is
+ * hidden by adding the `scroll-capturing` class during capture.
  */
 export async function recordScrollAnimation(opts: {
     wrapperEl: HTMLElement;   // root .wrapper (full 1920x1080 capture target)
@@ -288,24 +378,16 @@ export async function recordScrollAnimation(opts: {
     const outputPath = await video.saveFileDialog(`${baseName}.mov`);
     if (!outputPath) return false;
 
-    // Derive sibling output folder + base for the state PNGs from the chosen .mov path.
-    const sep = outputPath.includes('\\') ? '\\' : '/';
-    const lastSep = outputPath.lastIndexOf(sep);
-    const folder = lastSep >= 0 ? outputPath.slice(0, lastSep) : '';
-    const fileBase = (lastSep >= 0 ? outputPath.slice(lastSep + 1) : outputPath).replace(/\.mov$/i, '');
+    // Sibling output folder + base for the state PNGs, derived from the chosen .mov path.
+    const { folder, fileBase } = splitOutputPath(outputPath);
 
-    const tmpDir = await video.createTempDir();
+    const progress = makeProgress(opts.onProgress);
     const captureOpts = buildCaptureOpts(await buildFontEmbedCSS());
 
-    const FPS = 60;
     const duration = opts.durationSec ?? 2;
     const totalFrames = Math.max(1, Math.round(duration * FPS));
 
-    function easeInOut(t: number): number {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-
-    // --- Prep: drive scroll via margin instead of scrollLeft so html-to-image captures it ---
+    // --- Prep: drive scroll via margin instead of scrollLeft ---
     const firstChild = opts.scrollEl.firstElementChild as HTMLElement | null;
     const origScrollLeft = opts.scrollEl.scrollLeft;
     const origScrollBehavior = opts.scrollEl.style.scrollBehavior;
@@ -329,11 +411,10 @@ export async function recordScrollAnimation(opts: {
         }
     });
 
-    // The captured scroll is faked via a negative margin on the first flex child while the
-    // live scrollLeft stays 0 (html-to-image ignores scrollLeft anyway). The real left
-    // edge-fade is rendered reactively from scrollLeft, so at scrollLeft 0 it's gone — we
-    // add our own temporary left-fade overlay and drive its opacity to match the simulated
-    // offset, exactly like the live fade (fades in over 60px).
+    // The real left edge-fade is rendered reactively from scrollLeft, so at scrollLeft 0 it's
+    // gone — we render our own left-fade, captured once at full opacity and composited per
+    // frame with an opacity matching the simulated offset, exactly like the live fade (fades in
+    // over 60px).
     //
     // NOTE: the .fade-left CSS in TierList.vue is *scoped* ([data-v-…]), so a manually-created
     // element wouldn't pick it up — we replicate the styles inline instead (kept in sync with
@@ -352,15 +433,14 @@ export async function recordScrollAnimation(opts: {
             'z-index: 5',
             'border-radius: 11px 0 0 11px',
             'background: linear-gradient(to right, rgba(28, 28, 28, 1) 0%, rgba(28, 28, 28, 0) 100%)',
-            'transition: none', // set opacity instantly per frame, no lag
-            'opacity: 0',
+            'transition: none',
+            'opacity: 1',
         ].join('; ');
         wrapperOfTier.appendChild(tempFade);
     }
 
     const applyScroll = (offset: number) => {
         if (firstChild) firstChild.style.marginLeft = (origMarginLeft - offset) + 'px';
-        if (tempFade) tempFade.style.opacity = String(Math.min(Math.max(offset, 0) / 60, 1));
     };
 
     const restore = () => {
@@ -372,9 +452,41 @@ export async function recordScrollAnimation(opts: {
         opts.scrollEl.scrollLeft = origScrollLeft;
     };
 
+    let stream: VideoStream | null = null;
     try {
         opts.scrollEl.style.scrollBehavior = 'auto';
         opts.scrollEl.scrollLeft = 0;
+        // Let the scroll handler / edge-fade state settle at scrollLeft 0 before capturing chrome.
+        await nextFrame();
+        await nextFrame();
+
+        progress({ phase: 'capturing', current: 0, total: totalFrames, message: 'Preparing frames...' });
+        await nextFrame();
+
+        const comp = new FrameCompositor(opts.wrapperEl, captureOpts);
+        const sprites = [...opts.wrapperEl.querySelectorAll<HTMLElement>(SPRITES)];
+        const overlays = [...opts.wrapperEl.querySelectorAll<HTMLElement>(TIER_OVERLAYS)];
+
+        // Our left fade: capture it alone (at opacity 1), then take it out of the DOM so the
+        // static "above" layer doesn't include it.
+        let fadeLayer: HTMLCanvasElement | null = null;
+        let fadeX = 0, fadeY = 0;
+        if (tempFade && wrapperOfTier) {
+            fadeLayer = await comp.captureElement(tempFade);
+            const rootRect = opts.wrapperEl.getBoundingClientRect();
+            const tierRect = wrapperOfTier.getBoundingClientRect();
+            fadeX = tierRect.left - rootRect.left;
+            fadeY = tierRect.top - rootRect.top;
+            tempFade.remove();
+            tempFade = null;
+        }
+
+        await comp.ensureSprites(sprites);
+        const below = await comp.captureLayer({ hide: [...sprites, ...overlays] });
+        const above = await comp.captureLayer({ only: overlays });
+
+        // Lossless RGBA so the .mov frames match the exported PNGs exactly (no color shift).
+        stream = await VideoStream.begin(video, outputPath, FPS, comp.width, comp.height, true);
 
         let firstFrameDataUrl = '';
         let lastFrameDataUrl = '';
@@ -384,40 +496,42 @@ export async function recordScrollAnimation(opts: {
             const offset = opts.fromScroll + (opts.toScroll - opts.fromScroll) * easeInOut(t);
             applyScroll(offset);
 
-            opts.onProgress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
+            progress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
 
-            await nextFrame();
-            const dataUrl = await htmlToImage.toPng(opts.wrapperEl, captureOpts);
-            await video.saveFrame(tmpDir, f, dataUrl);
+            comp.clear();
+            comp.drawLayer(below);
+            comp.drawSprites(sprites);
+            if (fadeLayer) comp.drawLayer(fadeLayer, fadeX, fadeY, Math.min(Math.max(offset, 0) / 60, 1));
+            comp.drawLayer(above);
 
-            if (f === 0) firstFrameDataUrl = dataUrl;
-            if (f === totalFrames) lastFrameDataUrl = dataUrl;
+            if (f === 0) firstFrameDataUrl = comp.toDataURL();
+            if (f === totalFrames) lastFrameDataUrl = comp.toDataURL();
+
+            await stream.write(comp.pixels());
+            await maybeYield(f);
         }
 
         // Save the two state PNGs (identical to the video's first/last frames).
         try {
             if (firstFrameDataUrl) await opts.saveStatePng(folder, `${fileBase}-state1.png`, firstFrameDataUrl);
             if (lastFrameDataUrl) await opts.saveStatePng(folder, `${fileBase}-state2.png`, lastFrameDataUrl);
-        } catch { /* PNGs are best-effort; continue to encode the video */ }
+        } catch { /* PNGs are best-effort; continue to finish the video */ }
 
-        opts.onProgress({ phase: 'encoding', current: 0, total: 1, message: 'Encoding video with FFmpeg...' });
-        // Lossless RGBA so the .mov frames match the exported PNGs exactly (no color shift).
-        const result = await video.encode(tmpDir, outputPath, FPS, true);
+        progress({ phase: 'encoding', current: 0, total: 1, message: 'Finishing video...' });
+        const result = await stream.end();
 
         if (!result.success) {
-            opts.onProgress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
-            await video.cleanup(tmpDir);
+            progress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
             restore();
             return false;
         }
 
-        opts.onProgress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
-        await video.cleanup(tmpDir);
+        progress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
         restore();
         return true;
     } catch (e) {
-        opts.onProgress({ phase: 'error', current: 0, total: 0, message: String(e) });
-        try { await video.cleanup(tmpDir); } catch { /* ignore */ }
+        progress({ phase: 'error', current: 0, total: 0, message: String(e) });
+        if (stream) await stream.abort();
         restore();
         return false;
     }
@@ -431,9 +545,10 @@ export async function recordScrollAnimation(opts: {
  * Because each tier row uses `overflow:hidden`, an in-place transform can't carry a sprite
  * across tiers without being clipped. So during capture the real sprites are hidden and every
  * sprite is rendered as an absolutely-positioned clone in an un-clipped overlay layered over the
- * static backdrop (tier rows / labels / counts). The overlay clones are animated each frame.
+ * static backdrop (tier rows / labels / counts). The overlay clones are animated each frame and
+ * painted by the compositor from the sprite sheet.
  *
- * Exported as a transparent, lossless qtrle .mov (exact color match to the PNG exports), exactly
+ * Exported as a transparent, lossless .mov (exact color match to the PNG exports), exactly
  * like the scroll animation export.
  */
 export async function recordChangeAnimation(opts: {
@@ -455,7 +570,7 @@ export async function recordChangeAnimation(opts: {
     const outputPath = await video.saveFileDialog('change.mov');
     if (!outputPath) return false;
 
-    const tmpDir = await video.createTempDir();
+    const progress = makeProgress(opts.onProgress);
     const captureOpts = buildCaptureOpts(await buildFontEmbedCSS());
 
     const wrapperEl = opts.wrapperEl;
@@ -488,10 +603,6 @@ export async function recordChangeAnimation(opts: {
         });
     }
 
-    function easeInOut(t: number): number {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-
     // Build a detached, absolutely-positioned clone of a sprite at the given wrapper-relative pos.
     function makeClone(el: HTMLElement, left: number, top: number): HTMLElement {
         const clone = el.cloneNode(true) as HTMLElement;
@@ -501,6 +612,7 @@ export async function recordChangeAnimation(opts: {
         clone.style.left = left + 'px';
         clone.style.top = top + 'px';
         clone.style.margin = '0';           // measured rect already includes flex margins
+        clone.style.transition = 'none';
         return clone;
     }
 
@@ -511,7 +623,7 @@ export async function recordChangeAnimation(opts: {
         await nextFrame();
         const wrapRect = wrapperEl.getBoundingClientRect();
         const m = new Map<string, Snap>();
-        wrapperEl.querySelectorAll<HTMLElement>('[data-pokemon]').forEach(el => {
+        wrapperEl.querySelectorAll<HTMLElement>(SPRITES).forEach(el => {
             const name = el.dataset.pokemon;
             if (!name) return;
             const r = el.getBoundingClientRect();
@@ -534,7 +646,10 @@ export async function recordChangeAnimation(opts: {
         resetRowScroll();
     };
 
+    let stream: VideoStream | null = null;
     try {
+        progress({ phase: 'capturing', current: 0, total: 1, message: 'Preparing frames...' });
+
         // Measure both endpoint layouts.
         await opts.setDate(opts.date1);
         const map1 = await measure();
@@ -577,7 +692,7 @@ export async function recordChangeAnimation(opts: {
 
         // Hide the real sprites (the backdrop keeps tier rows, labels and counts). Done AFTER
         // cloning so the clones stay visible.
-        wrapperEl.querySelectorAll<HTMLElement>('[data-pokemon]').forEach(el => {
+        wrapperEl.querySelectorAll<HTMLElement>(SPRITES).forEach(el => {
             hiddenReal.push({ el, vis: el.style.visibility });
             el.style.visibility = 'hidden';
         });
@@ -586,8 +701,18 @@ export async function recordChangeAnimation(opts: {
         // Suppress the edge-fade overlays now that the date2 backdrop is settled, so the morph
         // doesn't show an unwanted darkening near the threshold labels.
         hideEdgeFades();
+        await nextFrame();
 
-        const FPS = 60;
+        const comp = new FrameCompositor(wrapperEl, captureOpts);
+        const clones = anims.map(a => a.el);
+        await comp.ensureSprites(clones);
+        // Backdrop: everything but sprites (the overlay clones paint above the labels, so there
+        // is no "above" layer here).
+        const below = await comp.captureLayer({ hide: wrapperEl.querySelectorAll(SPRITES) });
+
+        // Lossless RGBA so the .mov frames match the exported PNGs exactly (no color shift).
+        stream = await VideoStream.begin(video, outputPath, FPS, comp.width, comp.height, true);
+
         const morph = opts.morphSec ?? 1.6;
         const holdStart = opts.holdStartSec ?? 0.15;
         const holdEnd = opts.holdEndSec ?? 0.2;
@@ -615,35 +740,31 @@ export async function recordChangeAnimation(opts: {
                 }
             }
 
-            opts.onProgress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
-            await nextFrame();
-            const dataUrl = await htmlToImage.toPng(wrapperEl, captureOpts);
-            await video.saveFrame(tmpDir, f, dataUrl);
+            progress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
+
+            comp.clear();
+            comp.drawLayer(below);
+            comp.drawSprites(clones, { clip: false });
+            await stream.write(comp.pixels());
+            await maybeYield(f);
         }
 
-        opts.onProgress({ phase: 'encoding', current: 0, total: 1, message: 'Encoding video with FFmpeg...' });
-        // Lossless RGBA (qtrle) so the .mov frames match the exported PNGs exactly (no color shift).
-        const result = await video.encode(tmpDir, outputPath, FPS, true);
+        progress({ phase: 'encoding', current: 0, total: 1, message: 'Finishing video...' });
+        const result = await stream.end();
 
         if (!result.success) {
-            opts.onProgress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
-            await video.cleanup(tmpDir);
+            progress({ phase: 'error', current: 0, total: 0, message: `FFmpeg error: ${result.error}` });
             restore();
             return false;
         }
 
-        opts.onProgress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
-        await video.cleanup(tmpDir);
+        progress({ phase: 'done', current: totalFrames, total: totalFrames, message: `Saved to ${outputPath}` });
         restore();
         return true;
     } catch (e) {
-        opts.onProgress({ phase: 'error', current: 0, total: 0, message: String(e) });
-        try { await video.cleanup(tmpDir); } catch { /* ignore */ }
+        progress({ phase: 'error', current: 0, total: 0, message: String(e) });
+        if (stream) await stream.abort();
         restore();
         return false;
     }
-}
-
-function nextFrame(): Promise<void> {
-    return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }

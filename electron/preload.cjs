@@ -44,12 +44,12 @@ contextBridge.exposeInMainWorld('electronWatch', {
   checkNow: () => ipcRenderer.invoke('watch:checkNow'),
 })
 
-// Expose video export API
+// Expose video export API — frames are streamed as raw RGBA straight into FFmpeg
 contextBridge.exposeInMainWorld('electronVideo', {
-  createTempDir: () => ipcRenderer.invoke('video:createTempDir'),
-  saveFrame: (tmpDir, frameIndex, dataUrl) => ipcRenderer.invoke('video:saveFrame', tmpDir, frameIndex, dataUrl),
-  encode: (tmpDir, outputPath, fps, lossless) => ipcRenderer.invoke('video:encode', tmpDir, outputPath, fps, lossless),
-  cleanup: (tmpDir) => ipcRenderer.invoke('video:cleanup', tmpDir),
+  beginStream: (outputPath, fps, width, height, lossless) => ipcRenderer.invoke('video:beginStream', outputPath, fps, width, height, lossless),
+  writeFrame: (id, data) => ipcRenderer.invoke('video:writeFrame', id, data),
+  endStream: (id) => ipcRenderer.invoke('video:endStream', id),
+  abortStream: (id) => ipcRenderer.invoke('video:abortStream', id),
   saveFileDialog: (defaultName) => ipcRenderer.invoke('dialog:saveFileDialog', defaultName),
 })
 

@@ -30,10 +30,11 @@ declare global {
       checkNow: () => Promise<string[]>
     }
     electronVideo?: {
-      createTempDir: () => Promise<string>
-      saveFrame: (tmpDir: string, frameIndex: number, dataUrl: string) => Promise<void>
-      encode: (tmpDir: string, outputPath: string, fps: number, lossless?: boolean) => Promise<{ success: boolean; error?: string }>
-      cleanup: (tmpDir: string) => Promise<void>
+      /** Start an FFmpeg process that encodes raw RGBA frames written via writeFrame. */
+      beginStream: (outputPath: string, fps: number, width: number, height: number, lossless?: boolean) => Promise<{ id?: string; error?: string }>
+      writeFrame: (id: string, data: Uint8Array) => Promise<{ success: boolean; error?: string }>
+      endStream: (id: string) => Promise<{ success: boolean; error?: string }>
+      abortStream: (id: string) => Promise<void>
       saveFileDialog: (defaultName: string) => Promise<string | null>
     }
     electronScheduler?: {

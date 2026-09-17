@@ -1,8 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs, { Dirent } from 'fs'
-import os from 'os'
-import { execFile } from 'child_process'
+import { execFile, spawn, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 import pkg from 'electron-updater'
@@ -134,6 +133,13 @@ function detectExternalChanges(): string[] {
   return changed
 }
 
+// Dev-only automation hooks (never active in a packaged build):
+//   STP_HEADLESS=1       keep the window hidden and don't throttle it, so exports can be
+//                        driven over the remote-debugging port without a visible window
+//   STP_AUTOSAVE_DIR=dir the video save dialog returns <dir>/<defaultName> without showing
+const devHeadless = !app.isPackaged && process.env.STP_HEADLESS === '1'
+const devAutosaveDir = !app.isPackaged ? process.env.STP_AUTOSAVE_DIR : undefined
+
 function createWindow(): void {
   // Preload script path differs between dev and production
   const preloadPath = app.isPackaged
@@ -147,6 +153,7 @@ function createWindow(): void {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      ...(devHeadless ? { backgroundThrottling: false } : {}),
     },
     backgroundColor: '#1a1a1a',
     show: false,
@@ -158,7 +165,7 @@ function createWindow(): void {
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show()
+    if (!devHeadless) mainWindow.show()
   })
 
   // On window focus, check if any tracked workspace file has been modified externally
@@ -181,6 +188,69 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+}
+
+// --- FFmpeg resolution (shared by the video export handlers) ---
+
+/** Resolve the ffmpeg binary path — try multiple locations. */
+function resolveFfmpegPath(): { path: string | null; tried: string[] } {
+  const isWin = process.platform === 'win32'
+  const ffmpegBin = isWin ? 'ffmpeg.exe' : 'ffmpeg'
+  const candidates: string[] = []
+
+  // 1. Try require('ffmpeg-static') — works in dev when node_modules is intact
+  try {
+    const fromRequire = require('ffmpeg-static')
+    if (fromRequire) {
+      // In packaged app, the binary is inside the asar archive where execFile can't reach it.
+      // asarUnpack extracts it to app.asar.unpacked — check that path first.
+      if (fromRequire.includes('app.asar')) {
+        candidates.push(fromRequire.replace('app.asar', 'app.asar.unpacked'))
+      }
+      candidates.push(fromRequire)
+    }
+  } catch { /* ignore */ }
+
+  // 2. Relative to compiled electron main (dist-electron/../node_modules)
+  candidates.push(path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+  // 3. Relative to app root
+  candidates.push(path.join(app.getAppPath(), 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+  // 4. Relative to process.cwd()
+  candidates.push(path.join(process.cwd(), 'node_modules', 'ffmpeg-static', ffmpegBin))
+
+  // 5. Packaged app — extraResources
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, ffmpegBin))
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      console.log('FFmpeg resolved:', candidate)
+      return { path: candidate, tried: candidates }
+    }
+  }
+  return { path: null, tried: candidates }
+}
+
+/** Whether this ffmpeg build has the given encoder (cached per binary + encoder). */
+const encoderChecks = new Map<string, Promise<boolean>>()
+function ffmpegHasEncoder(ffmpegPath: string, encoder: string): Promise<boolean> {
+  const key = ffmpegPath + '::' + encoder
+  let check = encoderChecks.get(key)
+  if (!check) {
+    check = new Promise<boolean>((resolve) => {
+      execFile(ffmpegPath, ['-hide_banner', '-encoders'], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+        if (error) { resolve(false); return }
+        // `ffmpeg -encoders` lists one encoder per line as "<flags> <name> <description>",
+        // where the flags column starts with V for video encoders.
+        resolve(new RegExp('^\\s*V\\S*\\s+' + encoder + '\\s', 'm').test(String(stdout)))
+      })
+    })
+    encoderChecks.set(key, check)
+  }
+  return check
 }
 
 // IPC Handlers for file system operations
@@ -378,145 +448,144 @@ function setupIpcHandlers(): void {
   })
 
   // --- Video export IPC handlers ---
+  //
+  // Frames are streamed from the renderer as raw RGBA buffers straight into FFmpeg's stdin,
+  // so encoding runs concurrently with capture (no PNG round-trip through the temp dir and
+  // no separate "encoding" pass at the end).
 
-  ipcMain.handle('video:createTempDir', async () => {
-    const tmpDir = path.join(os.tmpdir(), `stp-video-${Date.now()}`)
-    fs.mkdirSync(tmpDir, { recursive: true })
-    return tmpDir
-  })
+  type StreamSession = {
+    proc: ChildProcess
+    outputPath: string
+    stderr: string
+    exited: Promise<number | null>
+    exitCode: number | null | undefined
+  }
+  const streamSessions = new Map<string, StreamSession>()
+  let nextStreamId = 1
 
-  ipcMain.handle('video:saveFrame', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, frameIndex: number, dataUrl: string) => {
-    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '')
-    const buffer = Buffer.from(base64Data, 'base64')
-    const filename = `frame_${String(frameIndex).padStart(5, '0')}.png`
-    fs.writeFileSync(path.join(tmpDir, filename), buffer)
-  })
-
-  ipcMain.handle('video:encode', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string, outputPath: string, fps: number, lossless: boolean = false) => {
-    // Resolve ffmpeg binary path — try multiple locations
-    const isWin = process.platform === 'win32'
-    const ffmpegBin = isWin ? 'ffmpeg.exe' : 'ffmpeg'
-    let ffmpegPath = 'ffmpeg'
-    const candidates: string[] = []
-
-    // 1. Try require('ffmpeg-static') — works in dev when node_modules is intact
-    try {
-      const fromRequire = require('ffmpeg-static')
-      if (fromRequire) {
-        // In packaged app, the binary is inside the asar archive where execFile can't reach it.
-        // asarUnpack extracts it to app.asar.unpacked — check that path first.
-        if (fromRequire.includes('app.asar')) {
-          candidates.push(fromRequire.replace('app.asar', 'app.asar.unpacked'))
-        }
-        candidates.push(fromRequire)
-      }
-    } catch { /* ignore */ }
-
-    // 2. Relative to compiled electron main (dist-electron/../node_modules)
-    candidates.push(path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', ffmpegBin))
-
-    // 3. Relative to app root
-    candidates.push(path.join(app.getAppPath(), 'node_modules', 'ffmpeg-static', ffmpegBin))
-
-    // 4. Relative to process.cwd()
-    candidates.push(path.join(process.cwd(), 'node_modules', 'ffmpeg-static', ffmpegBin))
-
-    // 5. Packaged app — extraResources
-    if (process.resourcesPath) {
-      candidates.push(path.join(process.resourcesPath, ffmpegBin))
+  ipcMain.handle('video:beginStream', async (
+    _event: Electron.IpcMainInvokeEvent,
+    outputPath: string,
+    fps: number,
+    width: number,
+    height: number,
+    lossless: boolean = false,
+  ): Promise<{ id?: string; error?: string }> => {
+    const ffmpegPath = resolveFfmpegPath()
+    if (!ffmpegPath.path) {
+      return { error: `FFmpeg not found. Tried:\n  ${ffmpegPath.tried.join('\n  ')}` }
     }
 
-    for (const candidate of candidates) {
-      console.log('FFmpeg candidate:', candidate, fs.existsSync(candidate) ? '✓' : '✗')
-      if (fs.existsSync(candidate)) {
-        ffmpegPath = candidate
-        break
-      }
-    }
+    // ProRes 4444 (alpha) when the build has it; otherwise — or when a lossless, color-exact
+    // file is requested — PNG-in-MOV. See the codec notes below for why.
+    const useProRes = !lossless && await ffmpegHasEncoder(ffmpegPath.path, 'prores_ks')
 
-    console.log('FFmpeg resolved:', ffmpegPath)
-
-    const inputPattern = path.join(tmpDir, 'frame_%05d.png')
-
-    // Try ProRes 4444 first (supports alpha), fall back to PNG-in-MOV if unavailable.
-    // `-qscale:v` sets the quantizer (higher = smaller file); 11 roughly halves the size
-    // versus the default bitrate with no visible loss on these flat UI graphics. The alpha
-    // channel is stored losslessly regardless, so sprite/edge cutouts stay crisp.
-    const proResArgs = [
+    const inputArgs = [
       '-y',
+      '-f', 'rawvideo',
+      '-pix_fmt', 'rgba',
+      '-video_size', `${width}x${height}`,
       '-framerate', String(fps),
-      '-i', inputPattern,
+      '-i', 'pipe:0',
+    ]
+
+    // ProRes 4444: `-qscale:v` sets the quantizer (higher = smaller file); 11 roughly halves
+    // the size versus the default bitrate with no visible loss on these flat UI graphics. The
+    // alpha channel is stored losslessly regardless, so sprite/edge cutouts stay crisp.
+    const proResArgs = [
       '-c:v', 'prores_ks',
       '-profile:v', '4444',
       '-pix_fmt', 'yuva444p10le',
       '-qscale:v', '11',
-      '-an',
-      outputPath,
     ]
 
-    // PNG-in-MOV: lossless RGBA. This is the color-accurate path used for the scroll video —
-    // it matches the PNG exports exactly in Premiere. (QuickTime Animation / qtrle would give
-    // inter-frame compression, but Premiere's QuickTime decoder applies its own gamma to it,
-    // producing a lighter image than the PNGs — a codec quirk that color tags can't override,
-    // so we stay on the png codec.) `-pred mixed` enables per-row PNG prediction filters for
-    // noticeably smaller files with zero quality loss; alpha is preserved.
+    // PNG-in-MOV: lossless RGBA. This is the color-accurate path used for the scroll/change
+    // videos — it matches the PNG exports exactly in Premiere. (QuickTime Animation / qtrle
+    // would give inter-frame compression, but Premiere's QuickTime decoder applies its own
+    // gamma to it, producing a lighter image than the PNGs — a codec quirk that color tags
+    // can't override, so we stay on the png codec.) `-pred mixed` enables per-row PNG
+    // prediction filters for noticeably smaller files with zero quality loss; alpha is
+    // preserved.
     const pngArgs = [
-      '-y',
-      '-framerate', String(fps),
-      '-i', inputPattern,
       '-c:v', 'png',
       '-pix_fmt', 'rgba',
       '-pred', 'mixed',
-      '-an',
-      outputPath,
     ]
 
-    // If none of the candidates exist, report which paths were tried
-    if (ffmpegPath === 'ffmpeg') {
-      const tried = candidates.join('\n  ')
-      return { success: false, error: `FFmpeg not found. Tried:\n  ${tried}` }
-    }
+    const args = [...inputArgs, ...(useProRes ? proResArgs : pngArgs), '-an', outputPath]
+    console.log('FFmpeg command:', ffmpegPath.path, args.join(' '))
 
-    function runFfmpeg(args: string[]): Promise<{ success: boolean; error?: string }> {
-      return new Promise((resolve) => {
-        console.log('FFmpeg command:', ffmpegPath, args.join(' '))
-        execFile(ffmpegPath, args, { maxBuffer: 50 * 1024 * 1024 }, (error, _stdout, stderr) => {
-          if (error) {
-            console.error('FFmpeg stderr:', stderr)
-            console.error('FFmpeg error:', error.message)
-            resolve({ success: false, error: `FFmpeg error: ${error.message}\n${stderr}` })
-          } else {
-            resolve({ success: true })
-          }
-        })
+    const proc = spawn(ffmpegPath.path, args, { stdio: ['pipe', 'ignore', 'pipe'] })
+    const session: StreamSession = { proc, outputPath, stderr: '', exited: Promise.resolve(null), exitCode: undefined }
+    session.exited = new Promise<number | null>((resolve) => {
+      proc.on('error', (err) => {
+        session.stderr += `\n${err.message}`
+        session.exitCode = -1
+        resolve(-1)
       })
-    }
+      proc.on('close', (code) => {
+        session.exitCode = code
+        resolve(code)
+      })
+    })
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      // Keep only the tail so a chatty encoder can't grow this without bound.
+      session.stderr = (session.stderr + chunk.toString()).slice(-16384)
+    })
+    // FFmpeg exiting early (bad args, disk full) makes the next write EPIPE; swallow it here
+    // and surface the real cause from stderr on end/write instead of crashing the main process.
+    proc.stdin?.on('error', () => { /* reported via exit code + stderr */ })
 
-    let result: { success: boolean; error?: string }
-    if (lossless) {
-      // Color-accurate lossless RGBA (PNG-in-MOV) so the scroll video matches the PNG exports
-      // exactly in Premiere (no ProRes RGB→YUV shift, no qtrle gamma quirk).
-      result = await runFfmpeg(pngArgs)
-    } else {
-      // Try ProRes first (smaller files), fall back to PNG codec if unavailable
-      result = await runFfmpeg(proResArgs)
-      if (!result.success) {
-        console.log('ProRes failed, trying PNG codec fallback...')
-        result = await runFfmpeg(pngArgs)
-      }
-    }
-    return result
+    const id = String(nextStreamId++)
+    streamSessions.set(id, session)
+    return { id }
   })
 
-  ipcMain.handle('video:cleanup', async (_event: Electron.IpcMainInvokeEvent, tmpDir: string) => {
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    } catch {
-      // Ignore cleanup errors
+  ipcMain.handle('video:writeFrame', async (_event: Electron.IpcMainInvokeEvent, id: string, data: Uint8Array): Promise<{ success: boolean; error?: string }> => {
+    const session = streamSessions.get(id)
+    if (!session) return { success: false, error: 'Unknown video stream' }
+    if (session.exitCode !== undefined) {
+      return { success: false, error: `FFmpeg exited early (code ${session.exitCode})\n${session.stderr}` }
     }
+    const stdin = session.proc.stdin!
+    const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+    // Back-pressure: if the pipe is full, wait for it to drain (or for FFmpeg to die) before
+    // letting the renderer produce the next frame.
+    const ok = stdin.write(buf)
+    if (!ok) {
+      await Promise.race([
+        new Promise<void>((resolve) => stdin.once('drain', resolve)),
+        session.exited,
+      ])
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('video:endStream', async (_event: Electron.IpcMainInvokeEvent, id: string): Promise<{ success: boolean; error?: string }> => {
+    const session = streamSessions.get(id)
+    if (!session) return { success: false, error: 'Unknown video stream' }
+    streamSessions.delete(id)
+    session.proc.stdin?.end()
+    const code = await session.exited
+    if (code !== 0) {
+      console.error('FFmpeg stderr:', session.stderr)
+      return { success: false, error: `FFmpeg error (exit code ${code})\n${session.stderr}` }
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('video:abortStream', async (_event: Electron.IpcMainInvokeEvent, id: string) => {
+    const session = streamSessions.get(id)
+    if (!session) return
+    streamSessions.delete(id)
+    try { session.proc.kill() } catch { /* ignore */ }
+    // A killed encoder leaves a truncated, unplayable file behind — don't hand that to the user.
+    await session.exited
+    try { fs.rmSync(session.outputPath, { force: true }) } catch { /* ignore */ }
   })
 
   ipcMain.handle('dialog:saveFileDialog', async (_event: Electron.IpcMainInvokeEvent, defaultName: string) => {
+    if (devAutosaveDir) return path.join(devAutosaveDir, defaultName)
     const result = await dialog.showSaveDialog({
       title: 'Save Video',
       defaultPath: defaultName,
