@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 
-import { useContextMenu, useFileExporter, useWorkspace } from '../store';
+import { useContextMenu, useFileExporter, useToast, useWorkspace } from '../store';
 
 import ViewingTierlist from './ViewingTierlist.vue'
 import ChooseWorkspace from './ChooseWorkspace.vue'
@@ -9,6 +9,7 @@ import ChooseTierlist from './ChooseTierlist.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 import ExternalChangesModal from '../components/ExternalChangesModal.vue'
+import UnsavedChangesModal from '../components/UnsavedChangesModal.vue'
 
 
 const enum Mode {
@@ -20,6 +21,11 @@ const enum Mode {
 
 const workspace = useWorkspace();
 const fileexporter = useFileExporter();
+const toast = useToast();
+
+// Unsaved-changes prompt shown when closing a tierlist that differs from its
+// last saved/loaded snapshot. Holds the tierlist name while the modal is open.
+const unsavedCloseTierlistName = ref<string | null>(null);
 
 // Start in loading mode so we can auto-load workspace (Electron or browser cache)
 const mode = ref<Mode>(Mode.LOADING);
@@ -112,9 +118,38 @@ function onTierlistSelected(index: number) {
     fileexporter.unloadFolder();
 }
 
-function onBackToTierlistSelection() {
+function closeActiveTierlist() {
+    unsavedCloseTierlistName.value = null;
     mode.value = Mode.CHOOSE_TIERLIST;
+    // setActiveTierlist(-1) restores the in-memory tierlist from its backup
+    // snapshot, so any unsaved edits are reverted on close.
     workspace.setActiveTierlist(-1);
+}
+
+function onBackToTierlistSelection() {
+    const active = workspace.activeTierlist;
+    if (active.filename && workspace.summarizeUnsavedChanges(active.filename)) {
+        unsavedCloseTierlistName.value = active.name;
+        return;
+    }
+    closeActiveTierlist();
+}
+
+async function onUnsavedSave() {
+    const result = await workspace.saveWorkspace();
+    if (!result.success) {
+        toast.addToast(`Save failed: ${result.message}`, 'error', { timeout: 3500 });
+        return; // stay on the tierlist so nothing is lost
+    }
+    closeActiveTierlist();
+}
+
+function onUnsavedDiscard() {
+    closeActiveTierlist();
+}
+
+function onUnsavedCancel() {
+    unsavedCloseTierlistName.value = null;
 }
 
 function handler(e: MouseEvent) {
@@ -166,6 +201,13 @@ function handler(e: MouseEvent) {
             v-if="externalChangedFiles.length > 0"
             :filenames="externalChangedFiles"
             @close="dismissExternalChanges"
+        />
+        <UnsavedChangesModal
+            v-if="unsavedCloseTierlistName !== null"
+            :tierlist-name="unsavedCloseTierlistName"
+            @save="onUnsavedSave"
+            @discard="onUnsavedDiscard"
+            @cancel="onUnsavedCancel"
         />
     </Teleport>
 </template>
