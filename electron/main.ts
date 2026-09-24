@@ -618,7 +618,7 @@ function writeUpdatePrefs(prefs: { dismissedVersion?: string }): void {
 // The renderer queries this to show an update button on the Choose a Tierlist screen.
 let availableUpdateVersion: string | null = null
 
-// Check for updates before showing the main window.
+// Check for updates in the background after the main window is shown.
 // If an update is available, prompt the user. If they accept, download, quit, and install.
 async function checkForUpdates(): Promise<void> {
   // Skip update checks in dev mode
@@ -643,14 +643,16 @@ async function checkForUpdates(): Promise<void> {
       return
     }
 
-    const response = await dialog.showMessageBox({
+    const parent = BrowserWindow.getAllWindows()[0]
+    const options: Electron.MessageBoxOptions = {
       type: 'info',
       title: 'Update Available',
       message: `A new version (v${newVersion}) is available. You are currently on v${currentVersion}.\n\nWould you like to update now?`,
       buttons: ['Update', 'Skip', "Don't remind me"],
       defaultId: 0,
       cancelId: 1,
-    })
+    }
+    const response = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
 
     if (response.response === 2) {
       // "Don't remind me" — save this version so we don't ask again
@@ -695,10 +697,11 @@ app.whenReady().then(async () => {
   setupIpcHandlers()
   setupUpdateIpcHandlers()
 
-  // Check for updates before creating the window
-  await checkForUpdates()
-
+  // Show the window immediately; the update check hits GitHub over the network and
+  // used to block window creation (and hang on slow/offline connections). It now runs
+  // in the background and shows its dialog once the result comes back.
   createWindow()
+  void checkForUpdates()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

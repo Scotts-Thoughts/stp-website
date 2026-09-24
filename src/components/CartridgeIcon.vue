@@ -39,7 +39,7 @@ const displayImage = computed(() => {
       <div class="cartridge-label">
         <div class="label-content">
           <div class="game-image" v-if="displayImage && !imgError">
-            <img :src="displayImage" :alt="name" @error="imgError = true" />
+            <img :src="displayImage" :alt="name" loading="lazy" decoding="async" @error="imgError = true" />
           </div>
           <div class="game-image placeholder" v-else>
             <div class="placeholder-icon">🎮</div>

@@ -9,6 +9,14 @@ import {
 import { getPokemonPokedexId } from './pokedex';
 
 /**
+ * File extension of the Pokemon artwork sets (`images/pokemon`, `images/pokemon_thumbnail`).
+ * They are stored as WebP to keep the packaged app small; the pixel-art `yellow-sprites`
+ * set stays PNG. New artwork (e.g. pulled from PokeAPI) must be converted to WebP before
+ * it is dropped into these folders.
+ */
+export const POKEMON_IMAGE_EXT = 'webp';
+
+/**
  * Resolves the on-disk image path for a Pokemon name.
  *
  * Extracted from PkmnImage.vue so it can be exercised by scripts/verify-pokemon-data.ts.
@@ -61,7 +69,7 @@ export function resolvePokemonImagePath(
             // Fallback to pokemon name if Pokedex ID not found
             return `./images/${imageSource}/${fileName}.png`;
         }
-        return `./images/${imageSource}/${fileName}.png`;
+        return `./images/${imageSource}/${fileName}.${POKEMON_IMAGE_EXT}`;
     }
-    return `./images/pokemon_thumbnail/${fileName}.png`;
+    return `./images/pokemon_thumbnail/${fileName}.${POKEMON_IMAGE_EXT}`;
 }

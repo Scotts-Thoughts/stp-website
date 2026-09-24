@@ -1,6 +1,6 @@
 # Cartridge Images
 
-This directory contains cartridge images for different Pokémon games. Each image should be a 60x60px PNG file that represents the game's cartridge artwork.
+This directory contains cartridge images for different Pokémon games. Each image is a PNG of the game's cartridge artwork, downscaled to at most 512px on the long edge (they display at ~120px, so anything larger just slows the first screen).
 
 ## Required Images:
 - yellow.png - Pokémon Yellow
@@ -17,6 +17,6 @@ This directory contains cartridge images for different Pokémon games. Each imag
 
 ## Image Specifications:
 - Format: PNG
-- Size: 60x60 pixels
+- Size: at most 512px on the long edge
 - Should show the game's cartridge artwork/logo
 - Transparent background preferred

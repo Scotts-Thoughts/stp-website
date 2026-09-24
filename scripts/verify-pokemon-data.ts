@@ -27,7 +27,7 @@ for (const f of fs.readdirSync(ROOT + 'public/data/pokedex')) {
 }
 
 const { pokemonNames } = await import('../src/utils/pokemon.ts')
-const { resolvePokemonImagePath } = await import('../src/utils/pokemon/images.ts')
+const { resolvePokemonImagePath, POKEMON_IMAGE_EXT } = await import('../src/utils/pokemon/images.ts')
 const { getPokemonData } = await import('../src/utils/pokemon/pokedex.ts')
 
 const thumbs = new Set(fs.readdirSync(ROOT + 'public/images/pokemon_thumbnail'))
@@ -99,7 +99,7 @@ if (process.argv.includes('--audit')) {
     const p = resolvePokemonImagePath(n, undefined, '<none>', false)
     referenced.add(p.substring(p.lastIndexOf('/') + 1))
   }
-  const orphans = [...thumbs].filter(f => f.endsWith('.png') && !referenced.has(f)).sort()
+  const orphans = [...thumbs].filter(f => f.endsWith('.' + POKEMON_IMAGE_EXT) && !referenced.has(f)).sort()
   const broken = pokemonNames
     .map(n => [n, resolvePokemonImagePath(n, undefined, '<none>', false)] as const)
     .filter(([, p]) => !imageExists(p))
