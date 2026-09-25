@@ -6,6 +6,7 @@ import { useGlobal } from "./global";
 import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } from "../utils/time"
 
 import { getPokemonData, hasPokedexData, preloadPokedex } from "../utils/pokemon/pokedex";
+import { resolveScheduledLabel } from "../utils/threshold-schedule";
 
 export type Tierlist = {
     filename: string
@@ -15,11 +16,14 @@ export type Tierlist = {
     thresholds_first: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
     thresholds_best: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
     thresholds_recent?: Partial<Record<MetricKeys, { label: string, data: number[] }[]>>
+    /** Legacy undated per-view defaults; superseded by thresholdSchedule (converted on first schedule edit). */
     thresholdDefaults?: {
         first?: Record<string, string>
         best?: Record<string, string>
         recent?: Record<string, string>
     }
+    /** Dated per-view threshold assignments; the display date picks which entry applies. */
+    thresholdSchedule?: ThresholdSchedule
     entries: Record<string, TierlistEntry>
     imageSource?: string
     platform?: string
@@ -39,6 +43,20 @@ export type Tierlist = {
     fTierLabel?: string
     states?: TierlistState[]
 }
+
+/** Internal view keys: 'best' is shown as "Followup" and 'recent' as "Best" in the UI. */
+export type ThresholdView = 'first' | 'best' | 'recent'
+
+/**
+ * One dated change for a view: from `from` (YYYY-MM-DD, inclusive) onward, each listed
+ * metric uses the named threshold group. Metrics not listed carry over from earlier entries.
+ */
+export type ThresholdScheduleEntry = {
+    from: string
+    sets: Partial<Record<MetricKeys, string>>
+}
+
+export type ThresholdSchedule = Partial<Record<ThresholdView, ThresholdScheduleEntry[]>>
 
 /**
  * A saved snapshot of the view settings that produced a tierlist graphic, so the
@@ -161,12 +179,9 @@ export const useTierlist = defineStore("tierlist", () => {
         localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(savedCategories));
     });
 
+    /** Selects the threshold group the schedule assigns to the active view + metric on the display date. */
     function resolveDefaultThresholdIndex() {
-        const tl = workspace.activeTierlist;
-        const defaults = tl.thresholdDefaults;
-        if (!defaults) { activeThresholdIndex.value = 0; return; }
-        const viewKey = activeCategory.value === 'first' ? 'first' : activeCategory.value === 'recent' ? 'recent' : 'best';
-        const label = defaults[viewKey]?.[activeMetric.value];
+        const label = resolveScheduledLabel(workspace.activeTierlist, activeCategory.value, activeMetric.value, releaseDateTreshold.value);
         if (!label) { activeThresholdIndex.value = 0; return; }
         const list = activeThresholdList.value;
         if (!list) { activeThresholdIndex.value = 0; return; }
@@ -187,9 +202,15 @@ export const useTierlist = defineStore("tierlist", () => {
         resolveDefaultThresholdIndex();
     });
 
-    // Re-resolve the active threshold whenever the per-view defaults change
-    // (e.g. the Thresholds dialog assigns a group to a view) so the live view updates immediately.
-    watch(() => workspace.activeTierlist.thresholdDefaults, () => {
+    // Thresholds are dated, so a new display date can select a different group.
+    // Saved-State recall sets the date first and applies its own threshold after a tick.
+    watch(() => releaseDateTreshold.value, () => {
+        resolveDefaultThresholdIndex();
+    });
+
+    // Re-resolve the active threshold whenever the schedule changes
+    // (e.g. edited in the Thresholds dialog) so the live view updates immediately.
+    watch(() => [workspace.activeTierlist.thresholdSchedule, workspace.activeTierlist.thresholdDefaults], () => {
         resolveDefaultThresholdIndex();
     }, { deep: true });
 
@@ -258,9 +279,23 @@ export const useTierlist = defineStore("tierlist", () => {
         return Array.from(years).sort((a, b) => b.localeCompare(a)); // Most recent first
     });
 
-    const firstThresholds = computed(() => activeTierlist.value.thresholds_first);
-    const firstAttempts = computed(() => {
-        const releaseDateTresh = parseDate(releaseDateTreshold.value);
+    // Species whose attempts are evaluated at `heldBack.date` instead of the display date.
+    // Used by the sequenced change-animation export to render "date 1 + the first k new
+    // Pokémon" in-between states. null = no override.
+    const heldBack = ref<{ names: Set<string>, date: number } | null>(null);
+
+    type AttemptRow = { pkmnName: string, attempt: Metrics };
+
+    /**
+     * Returns the cutoff (ms) an entry's attempts are compared against: the display date, or
+     * the held-back date for species that haven't been revealed yet.
+     */
+    function makeCutoff(date: string, held: { names: Set<string>, date: number } | null) {
+        const tresh = parseDate(date);
+        return (pkmnName: string) => held?.names.has(pkmnName) ? Math.min(held.date, tresh) : tresh;
+    }
+
+    function collectFirstAttempts(cutoff: (pkmnName: string) => number): AttemptRow[] {
         const list = [];
         for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
             // Skip entries with no attempts
@@ -269,7 +304,7 @@ export const useTierlist = defineStore("tierlist", () => {
             }
             const attempt = entry.attempts[0];
             // only include attempts that are before the release date treshold
-            if (attempt.releasedate > releaseDateTresh) {
+            if (attempt.releasedate > cutoff(pkmnName)) {
                 continue;
             }
             // filter by year
@@ -286,14 +321,16 @@ export const useTierlist = defineStore("tierlist", () => {
             list.push({ pkmnName, attempt });
         }
         return list;
-    });
+    }
+    const firstThresholds = computed(() => activeTierlist.value.thresholds_first);
+    const firstAttempts = computed(() => collectFirstAttempts(makeCutoff(releaseDateTreshold.value, heldBack.value)));
 
     const bestTresholds = computed(() => activeTierlist.value.thresholds_best);
-    const bestAttempts = computed(() => {
-        const releaseDateTresh = parseDate(releaseDateTreshold.value);
+    function collectBestAttempts(cutoff: (pkmnName: string) => number): AttemptRow[] {
         const list = [];
         for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
             // only include attempts that are before the release date treshold
+            const releaseDateTresh = cutoff(pkmnName);
             let attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
             // followup view requires at least 2 visible attempts to compare
             if (attempts.length < 2) {
@@ -319,10 +356,10 @@ export const useTierlist = defineStore("tierlist", () => {
             list.push({ pkmnName, attempt });
         }
         return list;
-    });
+    }
+    const bestAttempts = computed(() => collectBestAttempts(makeCutoff(releaseDateTreshold.value, heldBack.value)));
 
-    const recentAttempts = computed(() => {
-        const releaseDateTresh = parseDate(releaseDateTreshold.value);
+    function collectRecentAttempts(cutoff: (pkmnName: string) => number): AttemptRow[] {
         const list = [];
         for (const [pkmnName, entry] of Object.entries(activeTierlist.value.entries)) {
             // Skip entries with no attempts
@@ -330,6 +367,7 @@ export const useTierlist = defineStore("tierlist", () => {
                 continue;
             }
             // only include attempts that are before the release date treshold
+            const releaseDateTresh = cutoff(pkmnName);
             let attempts = entry.attempts.filter(attempt => attempt.releasedate <= releaseDateTresh);
             // if none of the attempts are before the release date treshold, skip this entry
             if (attempts.length === 0) {
@@ -362,7 +400,8 @@ export const useTierlist = defineStore("tierlist", () => {
             list.push({ pkmnName, attempt });
         }
         return list;
-    });
+    }
+    const recentAttempts = computed(() => collectRecentAttempts(makeCutoff(releaseDateTreshold.value, heldBack.value)));
 
     const recentThresholds = computed(() => activeTierlist.value.thresholds_recent ?? {});
     const activeThresholdList = computed(() => {
@@ -392,9 +431,9 @@ export const useTierlist = defineStore("tierlist", () => {
             return bestAttempts.value;
         }
     });
-    const activeFilteredAttempts = computed(() => {
+    function filterAttempts(attempts: AttemptRow[]) {
         const filteredAttempts = [];
-        for (const { pkmnName, attempt } of activeAttempts.value) {
+        for (const { pkmnName, attempt } of attempts) {
             // When viewing a saved State, only show the species it captured.
             if (restrictSpecies.value && !restrictSpecies.value.has(pkmnName)) {
                 continue;
@@ -413,7 +452,39 @@ export const useTierlist = defineStore("tierlist", () => {
             filteredAttempts.push({ pkmnName, attempt, tags });
         }
         return filteredAttempts;
-    });
+    }
+    const activeFilteredAttempts = computed(() => filterAttempts(activeAttempts.value));
+
+    /** The active metric's value for an attempt, or undefined when it isn't rankable. */
+    function metricValue(attempt: Metrics): number | undefined {
+        let metric = attempt[activeMetric.value];
+        if (metric === undefined) return undefined;
+        if (typeof metric === "function") metric = metric();
+        return metric >= 0 ? metric : undefined;
+    }
+
+    /**
+     * The Pokémon whose displayed result changes between `date1` and `date2` in the current
+     * view (new to the tierlist, or showing a different attempt), ordered worst result to best.
+     * Pure: doesn't touch the live view.
+     */
+    function featuredBetween(date1: string, date2: string): string[] {
+        const collect = activeCategory.value === "first" ? collectFirstAttempts
+            : activeCategory.value === "recent" ? collectRecentAttempts
+            : collectBestAttempts;
+        const before = new Map(filterAttempts(collect(makeCutoff(date1, null))).map(e => [e.pkmnName, e.attempt]));
+        const changed = [];
+        for (const { pkmnName, attempt } of filterAttempts(collect(makeCutoff(date2, null)))) {
+            if (before.get(pkmnName) === attempt) continue;
+            const metric = metricValue(attempt);
+            if (metric === undefined) continue;
+            changed.push({ pkmnName, metric, finished: !!attempt.finished });
+        }
+        // Worst first: unfinished runs (the "can't finish" tier) before finished ones, then
+        // higher metric before lower — the reverse of the tierlist's reading order.
+        changed.sort((a, b) => (a.finished === b.finished ? b.metric - a.metric : a.finished ? 1 : -1));
+        return changed.map(e => e.pkmnName);
+    }
 
     const activeTagList = computed(() => {
         const tags = new Set<string>();
@@ -463,14 +534,8 @@ export const useTierlist = defineStore("tierlist", () => {
 
         const filteredEntries = [];
         for (const entry of attempts) {
-            let metric = entry.attempt[metricKey];
-            if (metric === undefined) {
-                continue;
-            }
-            if (typeof metric === "function") {
-                metric = metric();
-            }
-            if (metric >= 0) {
+            const metric = metricValue(entry.attempt);
+            if (metric !== undefined) {
                 filteredEntries.push({metric, ...entry});
             }
         }
@@ -661,6 +726,8 @@ export const useTierlist = defineStore("tierlist", () => {
         groupedEntries,
         getMetrics,
         labels,
+        heldBack,
+        featuredBetween,
         // states
         states,
         activeStateId,

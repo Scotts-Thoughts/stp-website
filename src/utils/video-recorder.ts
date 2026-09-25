@@ -538,9 +538,51 @@ export async function recordScrollAnimation(opts: {
 }
 
 /**
- * Record a "change animation": morph the tierlist from the layout at `date1` to the layout
- * at `date2`. Shared Pokémon slide (eased) from their old position to their new one, Pokémon
- * that disappear fade out, and Pokémon that appear fade in — all simultaneously ("magic move").
+ * Render the tierlist's current state to a PNG data URL the same way the change-animation
+ * frames are painted (natural 1920x1080, rows scrolled to the start, edge fades suppressed), so
+ * a still lines up pixel-for-pixel with the first/last frame of those videos in an editor.
+ * Selection glow (`.active`) is kept; metric popouts are not part of a sprite and are left out.
+ */
+export async function captureStill(wrapperEl: HTMLElement, captureOpts?: CaptureOpts): Promise<string> {
+    const opts = captureOpts ?? buildCaptureOpts(await buildFontEmbedCSS());
+    const hadExporting = wrapperEl.classList.contains('exporting');
+    if (!hadExporting) wrapperEl.classList.add('exporting');
+
+    const rows = [...wrapperEl.querySelectorAll<HTMLElement>('.entry-row')];
+    const prevScroll = rows.map(r => r.scrollLeft);
+    const fades = [...wrapperEl.querySelectorAll<HTMLElement>('.fade-left, .fade-right')];
+    const prevDisplay = fades.map(el => el.style.display);
+    try {
+        for (const r of rows) r.scrollLeft = 0;
+        for (const el of fades) el.style.display = 'none';
+        await nextFrame();
+
+        const comp = new FrameCompositor(wrapperEl, opts);
+        const sprites = [...wrapperEl.querySelectorAll<HTMLElement>(SPRITES)];
+        const labels = [...wrapperEl.querySelectorAll<HTMLElement>('.threshold-label')];
+        await comp.ensureSprites(sprites);
+        const below = await comp.captureLayer({ hide: [...sprites, ...labels] });
+        const above = await comp.captureLayer({ only: labels });
+
+        comp.clear();
+        comp.drawLayer(below);
+        comp.drawSprites(sprites);
+        comp.drawLayer(above);
+        return comp.toDataURL();
+    } finally {
+        fades.forEach((el, i) => { el.style.display = prevDisplay[i]; });
+        rows.forEach((r, i) => { r.scrollLeft = prevScroll[i]; });
+        if (!hadExporting) wrapperEl.classList.remove('exporting');
+    }
+}
+
+/**
+ * Record a "change animation": morph the tierlist from one state (`applyFrom`, e.g. the layout
+ * at date 1) to another (`applyTo`, e.g. the layout at date 2). Shared Pokémon slide (eased)
+ * from their old position to their new one, Pokémon that disappear fade out, and Pokémon that
+ * appear fade in — all simultaneously ("magic move"). The static backdrop (counts, labels)
+ * crossfades from the start state's to the end state's as the new Pokémon fade in, so the first
+ * and last frames match stills of the two states exactly.
  *
  * Because each tier row uses `overflow:hidden`, an in-place transform can't carry a sprite
  * across tiers without being clipped. So during capture the real sprites are hidden and every
@@ -553,9 +595,10 @@ export async function recordScrollAnimation(opts: {
  */
 export async function recordChangeAnimation(opts: {
     wrapperEl: HTMLElement;                        // root .wrapper (1920x1080 capture target)
-    setDate: (date: string) => Promise<void>;      // set releaseDateTreshold and await re-render
-    date1: string;
-    date2: string;
+    applyFrom: () => Promise<void>;                // put the tierlist in the start state and await re-render
+    applyTo: () => Promise<void>;                  // put the tierlist in the end state and await re-render
+    outputPath?: string;                           // write here instead of asking with a save dialog
+    captureOpts?: CaptureOpts;                     // reuse across a batch of exports (fonts are fetched once)
     morphSec?: number;                             // slide/fade duration (default 1.6)
     holdStartSec?: number;                         // hold on date1 before morph (default 0.15)
     holdEndSec?: number;                           // hold on date2 after morph (default 0.2)
@@ -567,11 +610,11 @@ export async function recordChangeAnimation(opts: {
         return false;
     }
 
-    const outputPath = await video.saveFileDialog('change.mov');
+    const outputPath = opts.outputPath ?? await video.saveFileDialog('change.mov');
     if (!outputPath) return false;
 
     const progress = makeProgress(opts.onProgress);
-    const captureOpts = buildCaptureOpts(await buildFontEmbedCSS());
+    const captureOpts = opts.captureOpts ?? buildCaptureOpts(await buildFontEmbedCSS());
 
     const wrapperEl = opts.wrapperEl;
 
@@ -651,9 +694,14 @@ export async function recordChangeAnimation(opts: {
         progress({ phase: 'capturing', current: 0, total: 1, message: 'Preparing frames...' });
 
         // Measure both endpoint layouts.
-        await opts.setDate(opts.date1);
+        await opts.applyFrom();
         const map1 = await measure();
-        await opts.setDate(opts.date2);   // date2 is the final rendered backdrop
+        const comp = new FrameCompositor(wrapperEl, captureOpts);
+        // The start state's backdrop (no sprites, no edge fades), crossfaded out during the morph.
+        const belowFrom = await comp.captureLayer({
+            hide: wrapperEl.querySelectorAll(`${SPRITES}, .fade-left, .fade-right`),
+        });
+        await opts.applyTo();   // the end state is the final rendered backdrop
         const map2 = await measure();
 
         type Anim =
@@ -703,7 +751,6 @@ export async function recordChangeAnimation(opts: {
         hideEdgeFades();
         await nextFrame();
 
-        const comp = new FrameCompositor(wrapperEl, captureOpts);
         const clones = anims.map(a => a.el);
         await comp.ensureSprites(clones);
         // Backdrop: everything but sprites (the overlay clones paint above the labels, so there
@@ -742,8 +789,10 @@ export async function recordChangeAnimation(opts: {
 
             progress({ phase: 'capturing', current: f, total: totalFrames, message: `Capturing frame ${f}/${totalFrames}` });
 
+            // Backdrop changes (mostly the ranked count) land together with the new Pokémon.
             comp.clear();
-            comp.drawLayer(below);
+            if (addedOpacity < 1) comp.drawLayer(belowFrom);
+            comp.drawLayer(below, 0, 0, addedOpacity);
             comp.drawSprites(clones, { clip: false });
             await stream.write(comp.pixels());
             await maybeYield(f);

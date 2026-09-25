@@ -136,7 +136,8 @@ function detectExternalChanges(): string[] {
 // Dev-only automation hooks (never active in a packaged build):
 //   STP_HEADLESS=1       keep the window hidden and don't throttle it, so exports can be
 //                        driven over the remote-debugging port without a visible window
-//   STP_AUTOSAVE_DIR=dir the video save dialog returns <dir>/<defaultName> without showing
+//   STP_AUTOSAVE_DIR=dir the video save dialog returns <dir>/<defaultName> (and the folder
+//                        picker returns <dir>) without showing
 const devHeadless = !app.isPackaged && process.env.STP_HEADLESS === '1'
 const devAutosaveDir = !app.isPackaged ? process.env.STP_AUTOSAVE_DIR : undefined
 
@@ -412,6 +413,7 @@ function setupIpcHandlers(): void {
 
   // Dialog handlers for export functionality
   ipcMain.handle('dialog:selectFolder', async () => {
+    if (devAutosaveDir) return devAutosaveDir
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
       title: 'Select Export Folder'

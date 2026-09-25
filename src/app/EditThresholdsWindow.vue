@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import Window from '../components/Window.vue'
-import { METRIC, METRIC_TIME_KEYS, type MetricKeys, useWorkspace } from '../store';
+import { METRIC, METRIC_TIME_KEYS, type MetricKeys, type ThresholdScheduleEntry, type ThresholdView, useTierlist, useWorkspace } from '../store';
 import { formatTimeHM, formatTimeHMS } from '../utils/time';
+import { THRESHOLD_VIEWS, activeScheduleEntryIndex, ensureThresholdSchedule, getThresholdSchedule, resolveScheduledLabel } from '../utils/threshold-schedule';
 
 // ============================================================================
 // Component Props & Emits
@@ -20,7 +21,7 @@ defineEmits<{
 // Types
 // ============================================================================
 
-type ViewKey = 'first' | 'best' | 'recent';
+type ViewKey = ThresholdView;
 
 /** A unified representation of a threshold group, merging data from all views. */
 type UnifiedSet = {
@@ -33,7 +34,9 @@ type UnifiedSet = {
 // ============================================================================
 
 const TIER_NAMES = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'Surge'];
-const ALL_VIEWS: ViewKey[] = ['first', 'best', 'recent'];
+const ALL_VIEWS: ViewKey[] = THRESHOLD_VIEWS;
+/** UI names per internal view key ('best' is shown as Followup, 'recent' as Best). */
+const VIEW_TITLES: Record<ViewKey, string> = { first: 'First', best: 'Followup', recent: 'Best' };
 const VISIBLE_METRICS: MetricKeys[] = ['realtime', 'gametime', 'level', 'resets', 'blackouts', 'faults'];
 const thresholdMetrics = VISIBLE_METRICS.map(k => ({ key: k, title: METRIC[k].title }));
 
@@ -42,6 +45,7 @@ const thresholdMetrics = VISIBLE_METRICS.map(k => ({ key: k, title: METRIC[k].ti
 // ============================================================================
 
 const workspace = useWorkspace();
+const tierlist = useTierlist();
 const selectedMetric = ref<MetricKeys>('realtime');
 
 // Use the 1920x1080 coordinate space that the Window component expects
@@ -52,7 +56,7 @@ const centeredPosition = computed(() => ({
 
 // ---- Version bump pattern ----
 // Vue cannot detect in-place mutations of deeply nested tierlist threshold objects.
-// Incrementing `version` forces `allSets` and `isAssigned` to recompute.
+// Incrementing `version` forces `allSets`, `isActiveFor` and the schedule to recompute.
 const version = ref(0);
 function bump() { version.value++; }
 
@@ -184,50 +188,158 @@ function deleteSet(idx: number) {
     for (const view of ALL_VIEWS) {
         setArr(view, getArr(view).filter(s => s.label !== set.label));
     }
+    updateScheduleReferences(selectedMetric.value, set.label, undefined);
     cancelCellEdit();
     if (editingLabelIdx.value === idx) editingLabelIdx.value = null;
     bump();
 }
 
 // ============================================================================
-// Default Assignment
+// Dated Schedule
 // ============================================================================
+//
+// Each view (First/Followup/Best) has a list of dated changes. An entry assigns a
+// threshold group per metric from its date onward; metrics it leaves blank carry
+// over from earlier entries. The tierlist's display date picks the entry in effect.
 
-/** Ensures the thresholdDefaults object exists on the tierlist and returns it. */
-function ensureDefaults() {
-    const tl = workspace.activeTierlist;
-    if (!tl.thresholdDefaults) tl.thresholdDefaults = {};
-    return tl.thresholdDefaults;
-}
-
-/**
- * Assigns a threshold group as the default for a specific view and metric.
- * Also ensures the group exists in that view's array (adds it if missing).
- */
-function assignToView(idx: number, view: ViewKey) {
-    const set = allSets.value[idx];
-    if (!set) return;
-    const metric = selectedMetric.value;
-
-    // Make sure every view carries this group so it stays selectable in the Filter dropdown.
-    syncViewGroups(metric);
-
-    // Store as the default for this view + metric. The tierlist store watches
-    // thresholdDefaults and re-resolves the active threshold, so the live view updates immediately.
-    const defaults = ensureDefaults();
-    if (!defaults[view]) defaults[view] = {};
-    defaults[view]![metric] = set.label;
-
-    bump();
-}
-
-/** Checks whether a threshold group is the assigned default for a given view and metric. */
-function isAssigned(idx: number, view: ViewKey): boolean {
+/** Checks whether a threshold group is the one in effect for a view on the display date (selected metric). */
+function isActiveFor(idx: number, view: ViewKey): boolean {
     void version.value; // dependency on version for reactivity
     const set = allSets.value[idx];
     if (!set) return false;
-    const defaults = workspace.activeTierlist.thresholdDefaults;
-    return defaults?.[view]?.[selectedMetric.value] === set.label;
+    return resolveScheduledLabel(workspace.activeTierlist, view, selectedMetric.value, tierlist.releaseDateTreshold) === set.label;
+}
+
+/** Group labels available for a metric (union across views, in display order). */
+function labelsFor(metric: MetricKeys): string[] {
+    void version.value;
+    const labels: string[] = [];
+    for (const view of ALL_VIEWS) {
+        for (const set of getArr(view, metric)) {
+            if (!labels.includes(set.label)) labels.push(set.label);
+        }
+    }
+    return labels;
+}
+
+/** Metrics shown in schedule entries: those with at least one threshold group. */
+const scheduleMetrics = computed(() => {
+    void version.value;
+    return VISIBLE_METRICS.filter(m => labelsFor(m).length > 0).map(m => ({ key: m, title: METRIC[m].title }));
+});
+
+type ScheduleColumn = {
+    view: ViewKey
+    title: string
+    entries: ThresholdScheduleEntry[]
+    activeIdx: number
+}
+
+/** Each view's entries sorted by date, with the entry in effect on the display date marked. */
+const scheduleColumns = computed<ScheduleColumn[]>(() => {
+    void version.value;
+    const schedule = getThresholdSchedule(workspace.activeTierlist);
+    return ALL_VIEWS.map(view => {
+        const entries = [...(schedule[view] ?? [])].sort((a, b) => a.from.localeCompare(b.from));
+        return { view, title: VIEW_TITLES[view], entries, activeIdx: activeScheduleEntryIndex(entries, tierlist.releaseDateTreshold) };
+    });
+});
+
+/**
+ * Current stored entries for a view. Converts legacy defaults into a schedule first,
+ * so edits always target thresholdSchedule. Entries are identified by their date,
+ * which is unique within a view.
+ */
+function editableEntries(view: ViewKey): ThresholdScheduleEntry[] {
+    return ensureThresholdSchedule(workspace.activeTierlist)[view] ?? [];
+}
+
+/** Replaces a view's entry list (immutable spread for reactivity). */
+function setEntries(view: ViewKey, entries: ThresholdScheduleEntry[]) {
+    const tl = workspace.activeTierlist;
+    tl.thresholdSchedule = { ...ensureThresholdSchedule(tl), [view]: entries };
+    bump();
+}
+
+/** Adds an empty change to a view on the display date (every metric carries over until set). */
+function addEntry(view: ViewKey) {
+    const entries = editableEntries(view);
+    const from = tierlist.releaseDateTreshold;
+    if (entries.some(e => e.from === from)) {
+        alert(`${VIEW_TITLES[view]} already has a change on ${from}. Change the display date or edit that entry.`);
+        return;
+    }
+    setEntries(view, [...entries, { from, sets: {} }]);
+}
+
+function deleteEntry(view: ViewKey, from: string) {
+    if (!confirm(`Delete the ${VIEW_TITLES[view]} change on ${from}?`)) return;
+    setEntries(view, editableEntries(view).filter(e => e.from !== from));
+}
+
+function setEntryDate(view: ViewKey, from: string, value: string) {
+    if (!value || value === from) { bump(); return; }
+    const entries = editableEntries(view);
+    if (entries.some(e => e.from === value)) {
+        alert(`${VIEW_TITLES[view]} already has a change on ${value}.`);
+        bump(); // re-render the input with the old date
+        return;
+    }
+    setEntries(view, entries.map(e => e.from === from ? { ...e, from: value } : e));
+}
+
+/** Sets (or clears, with '') the group an entry assigns to a metric. */
+function setEntryMetric(view: ViewKey, from: string, metric: MetricKeys, label: string) {
+    setEntries(view, editableEntries(view).map(e => {
+        if (e.from !== from) return e;
+        const sets = { ...e.sets };
+        if (label) sets[metric] = label; else delete sets[metric];
+        return { ...e, sets };
+    }));
+}
+
+/** The group a blank metric in this entry resolves to (earlier entries first, then later ones). */
+function inheritedLabel(column: ScheduleColumn, entryIdx: number, metric: MetricKeys): string | undefined {
+    for (let i = entryIdx - 1; i >= 0; i--) {
+        const label = column.entries[i].sets[metric];
+        if (label) return label;
+    }
+    for (let i = entryIdx + 1; i < column.entries.length; i++) {
+        const label = column.entries[i].sets[metric];
+        if (label) return label;
+    }
+    return undefined;
+}
+
+/** Label for a blank metric's option: what it currently falls back to. */
+function inheritedOptionText(column: ScheduleColumn, entryIdx: number, metric: MetricKeys): string {
+    const label = inheritedLabel(column, entryIdx, metric);
+    return label ? `(same: ${label})` : '(first group)';
+}
+
+/** Applies a group rename (or removal, with newLabel undefined) to schedule references for a metric. */
+function updateScheduleReferences(metric: MetricKeys, oldLabel: string, newLabel: string | undefined) {
+    const tl = workspace.activeTierlist;
+    if (tl.thresholdSchedule) {
+        const next = { ...tl.thresholdSchedule };
+        for (const view of ALL_VIEWS) {
+            const entries = next[view];
+            if (!entries) continue;
+            next[view] = entries.map(e => {
+                if (e.sets[metric] !== oldLabel) return e;
+                const sets = { ...e.sets };
+                if (newLabel) sets[metric] = newLabel; else delete sets[metric];
+                return { ...e, sets };
+            });
+        }
+        tl.thresholdSchedule = next;
+    }
+    // Legacy defaults (not yet converted) must keep resolving too.
+    for (const view of ALL_VIEWS) {
+        const defaults = tl.thresholdDefaults?.[view];
+        if (!defaults || defaults[metric] !== oldLabel) continue;
+        if (newLabel) defaults[metric] = newLabel; else delete defaults[metric];
+    }
 }
 
 // ============================================================================
@@ -428,6 +540,7 @@ function saveLabelEdit() {
         const entry = source.find(s => s.label === oldName);
         if (entry) entry.label = newName;
     }
+    if (newName !== oldName) updateScheduleReferences(metric, oldName, newName);
     editingLabelIdx.value = null;
     bump();
 }
@@ -534,13 +647,17 @@ watch(selectedMetric, (metric) => {
 
 
 <template>
-    <Window title="Threshold Groups" :visible="visible" :width="1400" :height="600" @close="$emit('close')" :resizable="true" :custom-position="centeredPosition">
+    <Window title="Threshold Groups" :visible="visible" :width="1400" :height="900" @close="$emit('close')" :resizable="true" :custom-position="centeredPosition">
         <div class="thresholds-window">
             <div class="top-bar">
                 <select v-model="selectedMetric" class="metric-select">
                     <option v-for="m in thresholdMetrics" :key="m.key" :value="m.key">{{ m.title }}</option>
                 </select>
                 <button class="add-btn" @click="createSet">+ New</button>
+                <label class="display-date" title="The tierlist display date decides which dated change is in effect">
+                    Display date
+                    <input type="date" v-model="tierlist.releaseDateTreshold" />
+                </label>
             </div>
 
             <div class="row header">
@@ -583,9 +700,11 @@ watch(selectedMetric, (metric) => {
                 </div>
 
                 <div class="btn-cell">
-                    <button class="view-btn" :class="{ on: isAssigned(idx, 'first') }" @click="assignToView(idx, 'first')" title="Use for First Playthroughs">First</button>
-                    <button class="view-btn" :class="{ on: isAssigned(idx, 'best') }" @click="assignToView(idx, 'best')" title="Use for Followup Playthroughs">Followup</button>
-                    <button class="view-btn" :class="{ on: isAssigned(idx, 'recent') }" @click="assignToView(idx, 'recent')" title="Use for Best Playthroughs">Best</button>
+                    <span
+                        v-for="view in ALL_VIEWS" :key="view"
+                        class="view-badge" :class="{ on: isActiveFor(idx, view) }"
+                        :title="(isActiveFor(idx, view) ? 'In effect' : 'Not in effect') + ' for ' + VIEW_TITLES[view] + ' on ' + tierlist.releaseDateTreshold"
+                    >{{ VIEW_TITLES[view] }}</span>
                     <button class="view-btn del" @click="deleteSet(idx)" title="Delete group">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6" />
@@ -595,7 +714,45 @@ watch(selectedMetric, (metric) => {
                 </div>
             </div>
 
-            <div class="hint">Click values to edit. Tab/Enter to advance. Assign a group to a view with First/Followup/Best. Ctrl+S to save.</div>
+            <div class="schedule-title">Schedule</div>
+            <div class="schedule">
+                <div v-for="column in scheduleColumns" :key="column.view" class="schedule-col">
+                    <div class="schedule-col-title">{{ column.title }}</div>
+                    <div v-if="column.entries.length === 0" class="empty">No changes. Every metric uses its first group.</div>
+                    <div
+                        v-for="(entry, ei) in column.entries"
+                        :key="entry.from + version"
+                        class="schedule-entry"
+                        :class="{ active: ei === column.activeIdx }"
+                    >
+                        <div class="entry-head">
+                            <input type="date" class="entry-date" :value="entry.from" @change="setEntryDate(column.view, entry.from, ($event.target as HTMLInputElement).value)" />
+                            <span v-if="ei === column.activeIdx" class="entry-active">in effect</span>
+                            <button class="view-btn del" @click="deleteEntry(column.view, entry.from)" title="Delete this change">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div v-for="m in scheduleMetrics" :key="m.key" class="entry-metric">
+                            <span class="entry-metric-name">{{ m.title }}</span>
+                            <select
+                                class="entry-select"
+                                :class="{ inherited: !entry.sets[m.key] }"
+                                :value="entry.sets[m.key] ?? ''"
+                                @change="setEntryMetric(column.view, entry.from, m.key, ($event.target as HTMLSelectElement).value)"
+                            >
+                                <option value="">{{ inheritedOptionText(column, ei, m.key) }}</option>
+                                <option v-for="label in labelsFor(m.key)" :key="label" :value="label">{{ label }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="add-btn add-entry" @click="addEntry(column.view)">+ Change on {{ tierlist.releaseDateTreshold }}</button>
+                </div>
+            </div>
+
+            <div class="hint">Click values to edit. Tab/Enter to advance. Each schedule change applies from its date until the next one; blank metrics keep the previous group. Ctrl+S to save.</div>
         </div>
     </Window>
 </template>
@@ -662,6 +819,36 @@ watch(selectedMetric, (metric) => {
 .view-btn.on { background: #1a3a1a; border-color: #3a7a3a; color: #6c6; }
 .view-btn.del { color: #a44; padding: 4px 6px; }
 .view-btn.del:hover { color: #f66; }
+
+.display-date { display: flex; align-items: center; gap: 6px; color: #aaa; font-size: 14px; white-space: nowrap; }
+.display-date input, .entry-date {
+    padding: 6px 8px; background: #222; border: 1px solid #444; border-radius: 4px;
+    color: white; font-size: 14px; color-scheme: dark;
+}
+
+.view-badge {
+    padding: 4px 8px; background: #333; border: 1px solid #444;
+    border-radius: 3px; color: #666; font-size: 14px; cursor: default;
+}
+.view-badge.on { background: #1a3a1a; border-color: #3a7a3a; color: #6c6; }
+
+.schedule-title { margin-top: 12px; color: #aaa; font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 6px; }
+.schedule { display: flex; gap: 12px; align-items: flex-start; }
+.schedule-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.schedule-col-title { font-size: 16px; color: #ddd; }
+.schedule-entry { border: 1px solid #333; border-radius: 4px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.schedule-entry.active { border-color: #3a7a3a; background: rgba(58, 122, 58, 0.12); }
+.entry-head { display: flex; align-items: center; gap: 8px; }
+.entry-active { color: #6c6; font-size: 12px; }
+.entry-head .del { margin-left: auto; }
+.entry-metric { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.entry-metric-name { width: 90px; flex-shrink: 0; color: #999; }
+.entry-select {
+    flex: 1; min-width: 0; padding: 4px 6px; background: #222;
+    border: 1px solid #444; border-radius: 3px; color: white; font-size: 14px;
+}
+.entry-select.inherited { color: #777; }
+.add-entry { font-size: 14px; padding: 6px 10px; }
 
 .empty { color: #888; font-style: italic; text-align: center; padding: 20px 0; }
 .hint { font-size: 11px; color: #999; text-align: center; margin-top: 4px; }

@@ -3,8 +3,10 @@ import { ref, watch, useTemplateRef, onMounted, onUnmounted, nextTick, type Comp
 import { onKeyDown } from '@vueuse/core';
 
 import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion, type ContextMenuOptionArg } from '../store';
-import { currentDate } from '../utils/time';
-import { recordRerankingAnimation, recordChangeAnimation } from '../utils/video-recorder';
+import { currentDate, parseDate } from '../utils/time';
+import { recordRerankingAnimation, recordChangeAnimation, captureStill, buildCaptureOpts, buildFontEmbedCSS, type RecordingProgress } from '../utils/video-recorder';
+import { nextFrame, type CaptureOpts } from '../utils/frame-compositor';
+import { getPokemonData, hasPokedexData } from '../utils/pokemon/pokedex';
 import { loadSchedulerProjects, suggestEpisodeName } from '../utils/scheduler';
 
 import EditViewWindow from './EditViewWindow.vue'
@@ -18,7 +20,7 @@ import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
 import TimelineView from '../components/TimelineView.vue'
 import QuickCalendarPopup from '../components/QuickCalendarPopup.vue'
-import ExportChangeAnimationModal from '../components/ExportChangeAnimationModal.vue'
+import ExportChangeAnimationModal, { type ChangeAnimationExport } from '../components/ExportChangeAnimationModal.vue'
 import StatesWindow from '../components/StatesWindow.vue'
 
 const emit = defineEmits<{
@@ -514,13 +516,60 @@ async function exportRerankingVideo() {
     if (!success) return;
 }
 
-// Export a "change animation" morphing the tierlist from date1's state to date2's state.
-async function exportChangeAnimation(payload: { date1: string, date2: string }) {
+/** Set the display date and wait for the tierlist to re-render and its sprites to load. */
+async function settleView() {
+    await nextTick();
+    await nextFrame();
+    const imgs = [...(root.value?.querySelectorAll('img') ?? [])];
+    await Promise.all(imgs.map(img => img.complete ? null
+        : new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); })));
+    await nextFrame();
+}
+
+async function setViewDate(d: string) {
+    tierlist.heldBack = null;
+    tierlist.releaseDateTreshold = d;
+    await settleView();
+}
+
+/** Toast handler for a recording's progress; `prefix` labels which video of a batch it is. */
+function makeRecordingToaster(prefix = '') {
+    let toastId = toast.addToast(`${prefix}Preparing change animation...`, 'info', { timeout: -1, pending: true });
+    return {
+        onProgress(p: RecordingProgress) {
+            toast.removeToast(toastId);
+            toastId = -1;
+            if (p.phase === 'capturing' || p.phase === 'encoding') {
+                toastId = toast.addToast(prefix + p.message, 'info', { timeout: -1, pending: true });
+            } else if (p.phase === 'done') {
+                if (!prefix) toast.addToast(p.message, 'success');
+            } else if (p.phase === 'error') {
+                toast.addToast(prefix + p.message, 'error');
+            }
+        },
+        status(message: string) {
+            toast.removeToast(toastId);
+            toastId = toast.addToast(prefix + message, 'info', { timeout: -1, pending: true });
+        },
+        dismiss() {
+            toast.removeToast(toastId);
+            toastId = -1;
+        },
+    };
+}
+
+function exportChangeAnimation(payload: ChangeAnimationExport) {
     changeAnimActive.value = false;
     if (!window.electronVideo) {
         toast.addToast('Video export requires the desktop app', 'error');
         return;
     }
+    if (payload.mode === 'sequence') exportChangeSequence(payload);
+    else exportSingleChangeAnimation(payload);
+}
+
+// Export a "change animation" morphing the tierlist from date1's state to date2's state.
+async function exportSingleChangeAnimation(payload: { date1: string, date2: string }) {
     if (!root.value) return;
 
     // Preserve the current view + selection so we can restore it after capture.
@@ -530,37 +579,177 @@ async function exportChangeAnimation(payload: { date1: string, date2: string }) 
     global.popoutActive = false;
     tierlist.selectedPkmn.clear();
 
-    let toastId = toast.addToast('Preparing change animation...', 'info', { timeout: -1, pending: true });
+    const toaster = makeRecordingToaster();
 
     try {
         await recordChangeAnimation({
             wrapperEl: root.value,
-            date1: payload.date1,
-            date2: payload.date2,
-            async setDate(d) {
-                tierlist.releaseDateTreshold = d;
-                await nextTick();
-                // Two extra frames so the reactive re-layout fully settles before measuring.
-                await new Promise(r => requestAnimationFrame(() => r(null)));
-                await new Promise(r => requestAnimationFrame(() => r(null)));
-            },
-            onProgress(p) {
-                toast.removeToast(toastId);
-                if (p.phase === 'capturing' || p.phase === 'encoding') {
-                    toastId = toast.addToast(p.message, 'info', { timeout: -1, pending: true });
-                } else if (p.phase === 'done') {
-                    toast.addToast(p.message, 'success');
-                } else if (p.phase === 'error') {
-                    toast.addToast(p.message, 'error');
-                }
-            },
+            applyFrom: () => setViewDate(payload.date1),
+            applyTo: () => setViewDate(payload.date2),
+            onProgress: toaster.onProgress,
         });
     } finally {
+        toaster.dismiss();
         // Restore the original view + selection.
         tierlist.releaseDateTreshold = originalDate;
         global.popoutActive = prevPopout;
         tierlist.selectedPkmn.clear();
         for (const n of prevSelected) tierlist.selectedPkmn.add(n);
+    }
+}
+
+/** Lowercase, filesystem-safe version of a PokÃ©mon / type name for export filenames. */
+function fileSlug(name: string): string {
+    return name
+        .replace(/â™€/g, '-f').replace(/â™‚/g, '-m')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'pokemon';
+}
+
+/** Every displayed species in reading order (best result first). */
+function displayedRanking(): string[] {
+    return tierlist.groupedEntries.flat().map(e => e.pkmnName);
+}
+
+/**
+ * The full graphics package for a video that features several PokÃ©mon released on the same
+ * date: one change video per PokÃ©mon (revealed one by one, in `order`), plus stills:
+ *
+ *   0-start.png                   the tierlist before the first reveal
+ *   1-<pkmn>.mov                  reveals the first PokÃ©mon
+ *   1a-<pkmn>.png                 ...then highlights it
+ *   1b-below-<neighbor>.png       highlights the result one rank below it
+ *   1c-above-<neighbor>.png       highlights the result one rank above it
+ *   2-<pkmn>.mov, 2a..2c          ...and so on for each PokÃ©mon
+ *   type-<type>.png               the final tierlist filtered to each type among the revealed
+ *
+ * Leaves the view on date 2.
+ */
+async function exportChangeSequence(payload: ChangeAnimationExport) {
+    if (!root.value || !window.electronDialog) return;
+    const wrapperEl = root.value;
+    const { date1, date2, order } = payload;
+    if (order.length === 0) {
+        toast.addToast('No PokÃ©mon change between these dates', 'warning');
+        return;
+    }
+
+    const folder = await window.electronDialog.selectFolder();
+    if (!folder) return;
+    const sep = folder.includes('\\') ? '\\' : '/';
+    const joinPath = (name: string) => folder.replace(/[\\/]+$/, '') + sep + name;
+
+    const prevPopout = global.popoutActive;
+    const prevTypes = [...tierlist.includeTypeList];
+    global.popoutActive = false;
+    tierlist.selectedPkmn.clear();
+
+    const heldDate = parseDate(date1);
+    // State k: date 2 with everything after the k-th PokÃ©mon of `order` still held back at date 1.
+    async function applyStep(k: number) {
+        tierlist.releaseDateTreshold = date2;
+        tierlist.heldBack = k < order.length ? { names: new Set(order.slice(k)), date: heldDate } : null;
+        await settleView();
+    }
+
+    const failures: string[] = [];
+    let saved = 0;
+    let toaster = makeRecordingToaster();
+    let captureOpts: CaptureOpts | undefined;
+
+    async function saveStill(filename: string, highlight?: string) {
+        tierlist.selectedPkmn.clear();
+        if (highlight) tierlist.selectedPkmn.add(highlight);
+        await settleView();
+        try {
+            const dataUrl = await captureStill(wrapperEl, captureOpts);
+            const res = await window.electronDialog!.saveFile(folder!, filename, dataUrl);
+            if (res.success) saved++;
+            else failures.push(`${filename}: ${res.error}`);
+        } catch (e) {
+            failures.push(`${filename}: ${e}`);
+        } finally {
+            tierlist.selectedPkmn.clear();
+        }
+    }
+
+    try {
+        captureOpts = buildCaptureOpts(await buildFontEmbedCSS());
+
+        toaster.status('Saving start still...');
+        await setViewDate(date1);
+        await saveStill('0-start.png');
+
+        for (let i = 0; i < order.length; i++) {
+            const n = i + 1;
+            const name = order[i];
+            const slug = fileSlug(name);
+            toaster.dismiss();
+            toaster = makeRecordingToaster(`[${n}/${order.length}] `);
+
+            const ok = await recordChangeAnimation({
+                wrapperEl,
+                applyFrom: () => i === 0 ? setViewDate(date1) : applyStep(i),
+                applyTo: () => applyStep(n),
+                outputPath: joinPath(`${n}-${slug}.mov`),
+                captureOpts,
+                onProgress: toaster.onProgress,
+            });
+            if (!ok) {
+                failures.push(`${n}-${slug}.mov`);
+                break;
+            }
+            saved++;
+
+            // The recorder leaves the tierlist in the end state (PokÃ©mon n revealed).
+            toaster.status('Saving highlight stills...');
+            await applyStep(n);
+            await saveStill(`${n}a-${slug}.png`, name);
+            const ranking = displayedRanking();
+            const idx = ranking.indexOf(name);
+            const below = idx >= 0 ? ranking[idx + 1] : undefined;
+            const above = idx > 0 ? ranking[idx - 1] : undefined;
+            if (below) await saveStill(`${n}b-below-${fileSlug(below)}.png`, below);
+            if (above) await saveStill(`${n}c-above-${fileSlug(above)}.png`, above);
+        }
+
+        // One still of the final tierlist per type among the revealed PokÃ©mon.
+        if (failures.length === 0) {
+            const game = tierlist.activeTierlist.game;
+            if (!hasPokedexData(game)) {
+                toast.addToast(`No type data for ${game}; skipped the type stills`, 'warning', { timeout: 4000 });
+            } else {
+                const types: string[] = [];
+                for (const name of order) {
+                    const data = getPokemonData(game, name);
+                    for (const t of [data?.type_1, data?.type_2]) {
+                        if (t && !types.includes(t)) types.push(t);
+                    }
+                }
+                toaster.status('Saving type stills...');
+                await setViewDate(date2);
+                for (const type of types) {
+                    tierlist.includeTypeList = [type];
+                    await saveStill(`type-${fileSlug(type)}.png`);
+                }
+            }
+        }
+    } finally {
+        toaster.dismiss();
+        // Leave the view on date 2, as it now stands after the video.
+        tierlist.heldBack = null;
+        tierlist.includeTypeList = prevTypes;
+        tierlist.releaseDateTreshold = date2;
+        tierlist.selectedPkmn.clear();
+        global.popoutActive = prevPopout;
+    }
+
+    if (failures.length > 0) {
+        toast.addToast(`Export stopped with errors (${saved} file(s) saved): ${failures.join('; ')}`, 'error', { timeout: 8000 });
+    } else {
+        toast.addToast(`Exported ${saved} files to ${folder}`, 'success', { timeout: 5000 });
     }
 }
 

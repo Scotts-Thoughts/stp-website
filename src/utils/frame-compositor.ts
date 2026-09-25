@@ -222,12 +222,11 @@ export class FrameCompositor {
         // via `left`: Chromium's computed-style dump also carries the logical `inset-inline`
         // shorthand, which serializes after an overridden `left` and wins when the SVG is parsed.
         // Placed inside the root so the clones inherit the same context; scoped styles match by
-        // attribute anyway.
+        // attribute anyway. Cells are absolutely positioned and packed below.
         const sheet = document.createElement('div');
         sheet.style.cssText = [
             'position:absolute', 'left:0', 'top:0', `width:${SHEET_WIDTH}px`,
             'transform:translateX(-100000px)',
-            'display:flex', 'flex-wrap:wrap', 'align-items:flex-start', 'align-content:flex-start',
             'visibility:visible', 'opacity:1', 'filter:none',
             'pointer-events:none', 'background:transparent',
         ].join(';');
@@ -239,10 +238,10 @@ export class FrameCompositor {
         const defs = document.getElementById('outline20')?.closest('svg');
         if (defs) sheet.appendChild(defs.cloneNode(true));
 
-        const clones: { key: string; clone: HTMLElement; bakedFilter: string }[] = [];
+        const clones: { key: string; cell: HTMLElement; clone: HTMLElement; bakedFilter: string }[] = [];
         for (const [key, el] of entries) {
             const cell = document.createElement('div');
-            cell.style.cssText = `padding:${SPRITE_PAD}px;flex:none;`;
+            cell.style.cssText = `position:absolute;left:0;top:0;padding:${SPRITE_PAD}px;`;
             const clone = el.cloneNode(true) as HTMLElement;
             // For Pokémon sprites keep only the sprite's own markup (first child = PkmnImage's
             // .wrapper); anything slotted in after it (metric popouts) is not part of the sprite.
@@ -271,7 +270,7 @@ export class FrameCompositor {
             }
             cell.appendChild(clone);
             sheet.appendChild(cell);
-            clones.push({ key, clone, bakedFilter: '' });
+            clones.push({ key, cell, clone, bakedFilter: '' });
         }
 
         this.root.appendChild(sheet);
@@ -285,9 +284,31 @@ export class FrameCompositor {
             // The sheet sits inside the root, so its screen rects carry the root's display
             // scale too — measure everything in layout px.
             const { scaleX, scaleY } = this.rootFrame();
+
+            // Pack the cells in rows at whole-pixel positions, so every sprite is rasterized at
+            // the same sub-pixel phase no matter what else is on the sheet. (Packed by flex-wrap,
+            // a sprite's phase depended on the fractional widths of every sprite before it, so
+            // adding one Pokémon made the unchanged sprites after it land a pixel off from the
+            // previous export's.)
+            const sizes = clones.map(({ cell }) => {
+                const r = cell.getBoundingClientRect();
+                return { w: Math.ceil(r.width / scaleX), h: Math.ceil(r.height / scaleY) };
+            });
+            let x = 0, y = 0, rowH = 0;
+            for (let i = 0; i < clones.length; i++) {
+                const { cell } = clones[i];
+                const { w, h } = sizes[i];
+                if (x > 0 && x + w > SHEET_WIDTH) { x = 0; y += rowH; rowH = 0; }
+                cell.style.left = x + 'px';
+                cell.style.top = y + 'px';
+                x += w;
+                rowH = Math.max(rowH, h);
+            }
+            sheet.style.height = (y + rowH) + 'px';
+
             const sheetRect = sheet.getBoundingClientRect();
-            const sheetW = Math.ceil(sheetRect.width / scaleX);
-            const sheetH = Math.ceil(sheetRect.height / scaleY);
+            const sheetW = SHEET_WIDTH;
+            const sheetH = y + rowH;
 
             const measured = clones.map(c => {
                 const sr = c.clone.getBoundingClientRect();
