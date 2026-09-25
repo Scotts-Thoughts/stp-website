@@ -1091,6 +1091,7 @@ export const pokemonNames = [
     "Aegislash-Blade",
     "Aegislash-Shield",
     "Basculegion-Female",
+    "Basculegion-Male",
     "Basculin-Blue Striped",
     "Basculin-Red Striped",
     "Basculin-White Striped",
@@ -1457,7 +1458,7 @@ export const POKEMON_FORMS: Record<string, string[]> = {
     "Urshifu": ["Single Strike", "Rapid Strike"],
     "Zarude": ["Zarude", "Dada"],
     "Calyrex": ["Calyrex", "Ice Rider", "Shadow Rider"],
-    "Basculegion": ["Basculegion", "Female"],
+    "Basculegion": ["Basculegion", "Male", "Female"],
     "Enamorus": ["Incarnate", "Therian"],
     "Ursaluna": ["Ursaluna", "Bloodmoon"],
     // Gen 9
