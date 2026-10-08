@@ -116,3 +116,6 @@ for (const f of fs.readdirSync(OUT_DIR)) {
 
 console.log(summary.join('\n'))
 console.log(`\nSource: ${sourceDir}\nOutput: ${OUT_DIR}`)
+
+// The species -> national dex table is derived from the files just written.
+await import('./generate-national-dex.ts')

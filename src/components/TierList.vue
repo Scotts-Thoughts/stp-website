@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu, type ContextMenuOptionArg } from '../store';
-import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
+import { getBaseSpeciesName, getSpeciesRootName, hasAlternativeMoveType } from '../utils/pokemon';
 import { recordScrollAnimation } from '../utils/video-recorder';
 
 const emit = defineEmits<{
@@ -305,12 +305,21 @@ const data = computed(() => {
         if (hasAlternativeMoveType(entry.pkmnName)) return false;
         return true;
     });
-    // Count unique species (not forms) by extracting base species names
-    const uniqueSpecies = new Set(rankedEntries.map(entry => getBaseSpeciesName(entry.pkmnName)));
+    // Count unique species (not forms) by extracting base species names. A counted total
+    // (roster / pokedex) counts whole species, so X is counted the same way as Y.
+    const speciesOf = tierlist.countedTotal ? getSpeciesRootName : getBaseSpeciesName;
+    const uniqueSpecies = new Set(rankedEntries.map(entry => speciesOf(entry.pkmnName)));
+    // With a roster assigned, only its species count toward X, so X never exceeds Y.
+    const roster = tierlist.rosterSpecies;
+    if (roster) {
+        for (const species of uniqueSpecies) {
+            if (!roster.has(species)) uniqueSpecies.delete(species);
+        }
+    }
     
     return {
         groups:      tierlist.groupedEntries, 
-        total:       tierlist.activeTierlist.total[tierlist.activeTotalIndex], 
+        total:       tierlist.countedTotal?.value ?? tierlist.activeTierlist.total[tierlist.activeTotalIndex], 
         totalRanked: uniqueSpecies.size,
         labels:      tierlist.labels,
         rankedLabel: tierlist.activeCategory === "first" ? "Ranked" : "Ranked", // TODO: change labels
@@ -1217,6 +1226,20 @@ function sleep(ms: number): Promise<void> {
             </div>
             <!-- Ranked total popover -->
             <div v-if="showRankedPopover" class="ranked-popover" @click.stop>
+                <template v-if="tierlist.countedTotal?.source === 'roster'">
+                    <div class="ranked-popover-title">Assigned species</div>
+                    <div class="ranked-popover-note">
+                        Total is counted from the {{ tierlist.activeTierlist.roster?.length }} assigned
+                        species{{ tierlist.speciesFiltersActive ? ' that match the active filters' : '' }}.
+                        Edit them with Assign Species (S).
+                    </div>
+                </template>
+                <template v-else>
+                <div v-if="tierlist.countedTotal?.source === 'pokedex'" class="ranked-popover-note">
+                    Filters active: showing the {{ tierlist.countedTotal.value }} species in
+                    {{ tierlist.activeTierlist.game }}'s pokedex that match them. Assign species (S)
+                    to count from your own list instead.
+                </div>
                 <div class="ranked-popover-title">Total options</div>
                 <div
                     v-for="(value, index) in tierlist.activeTierlist.total"
@@ -1244,6 +1267,7 @@ function sleep(ms: number): Promise<void> {
                     />
                     <button class="ranked-popover-add-btn" @click.stop="addNewTotal()">+</button>
                 </div>
+                </template>
             </div>
         </div>
         <div class="credits-box"></div>
@@ -1622,6 +1646,13 @@ function sleep(ms: number): Promise<void> {
     margin-bottom: 8px;
     text-align: center;
     color: #aaa;
+}
+.ranked-popover-note {
+    width: 260px;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #aaa;
+    margin-bottom: 8px;
 }
 .ranked-popover-item {
     display: flex;

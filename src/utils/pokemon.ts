@@ -1589,6 +1589,33 @@ export function getBaseSpeciesName(pokemonName: string): string {
     return pokemonName;
 }
 
+/** pokemonNames entries whose species can't be read off the name's shape. */
+const SPECIES_ROOT_ALIASES: Record<string, string> = {
+    'PartnerEevee': 'Eevee',
+    'PartnerPikachu': 'Pikachu',
+    'PikachuSurfing': 'Pikachu',
+    'Tatsugiri Curly': 'Tatsugiri',     // "Mega Tatsugiri Curly"
+    'Tatsugiri Droopy': 'Tatsugiri',
+    'Tatsugiri Stretchy': 'Tatsugiri',
+};
+
+/**
+ * The species a name ultimately belongs to, looking through everything getBaseSpeciesName
+ * keeps: Mega / Primal prefixes, the X / Y / Z Mega variants and alternative-move suffixes.
+ * Examples:
+ * - "Mega Charizard X" -> "Charizard"
+ * - "Primal Groudon" -> "Groudon"
+ * - "Blastoise-egg-moves" -> "Blastoise"
+ * - "Alolan Marowak" -> "Marowak"
+ */
+export function getSpeciesRootName(pokemonName: string): string {
+    let name = removeAlternativeMoveType(pokemonName);
+    const special = /^(?:Mega|Primal) (.+?)(?: [XYZ])?$/.exec(name);
+    if (special) name = special[1];
+    // Twice: "Galarian Darmanitan-Zen Mode" sheds its form, then its regional prefix.
+    return SPECIES_ROOT_ALIASES[name] ?? getBaseSpeciesName(getBaseSpeciesName(name));
+}
+
 /**
  * Converts a form name to match the file naming convention used for Pokemon images.
  * Most forms use lowercase, but some special cases use capitalized or mixed case.

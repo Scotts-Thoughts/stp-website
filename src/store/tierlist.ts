@@ -5,7 +5,9 @@ import { useWorkspace } from ".";
 import { useGlobal } from "./global";
 import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } from "../utils/time"
 
-import { getPokemonData, hasPokedexData, preloadPokedex } from "../utils/pokemon/pokedex";
+import { getPokedexEntryNames, getPokemonData, getPokemonPokedexId, hasPokedexData, preloadPokedex } from "../utils/pokemon/pokedex";
+import { getSpeciesGeneration } from "../utils/pokemon/generations";
+import { getSpeciesRootName } from "../utils/pokemon";
 import { resolveScheduledLabel } from "../utils/threshold-schedule";
 
 export type Tierlist = {
@@ -25,6 +27,12 @@ export type Tierlist = {
     /** Dated per-view threshold assignments; the display date picks which entry applies. */
     thresholdSchedule?: ThresholdSchedule
     entries: Record<string, TierlistEntry>
+    /**
+     * The species (and forms) this tierlist covers, e.g. every Gen 1-4 species. When set,
+     * the "Ranked: X/Y" total is counted from it — narrowed by the type / growth rate /
+     * generation filters — instead of the hand-entered `total` options.
+     */
+    roster?: string[]
     imageSource?: string
     platform?: string
     finalTierLabel?: string
@@ -85,6 +93,7 @@ export type TierlistState = {
     excludeTags: string[]
     includeTypes: string[]
     includeGrowthRates: string[]
+    includeGenerations?: string[]
     includeYears: string[]
     // display toggles
     popoutActive: boolean
@@ -145,6 +154,7 @@ export const useTierlist = defineStore("tierlist", () => {
     const excludeTagsList = ref<string[]>(["backports", "backport"]);
     const includeTypeList = ref<string[]>([]);
     const includeGrowthRateList = ref<string[]>([]);
+    const includeGenerationList = ref<string[]>([]);
     const includeYearList = ref<string[]>([]);
     const releaseDateTreshold = ref<string>(currentDate());
 
@@ -256,6 +266,20 @@ export const useTierlist = defineStore("tierlist", () => {
         return includeGrowthRateList.value.includes(pokemonData.growth_rate);
     }
 
+    // Reads the static national dex table, so unlike type / growth rate it works for every
+    // game, including the ones without pokedex data.
+    const filterByGeneration = (pokemonName: string) => {
+        if (includeGenerationList.value.length === 0) return true;
+        const generation = getSpeciesGeneration(pokemonName);
+        return !!generation && includeGenerationList.value.includes(generation);
+    }
+
+    const passesSpeciesFilters = (pokemonName: string) =>
+        filterByType(pokemonName) && filterByGrowthRate(pokemonName) && filterByGeneration(pokemonName);
+
+    const speciesFiltersActive = computed(() =>
+        includeTypeList.value.length > 0 || includeGrowthRateList.value.length > 0 || includeGenerationList.value.length > 0);
+
     const filterByYear = (releasedate: number) => {
         if (includeYearList.value.length === 0) return true;
         const year = new Date(releasedate).getFullYear().toString();
@@ -311,11 +335,14 @@ export const useTierlist = defineStore("tierlist", () => {
             if (!filterByYear(attempt.releasedate)) {
                 continue;
             }
-            // filter by type and growth rate
+            // filter by type, growth rate and generation
             if (!filterByType(pkmnName)) {
                 continue;
             }
             if (!filterByGrowthRate(pkmnName)) {
+                continue;
+            }
+            if (!filterByGeneration(pkmnName)) {
                 continue;
             }
             list.push({ pkmnName, attempt });
@@ -343,11 +370,14 @@ export const useTierlist = defineStore("tierlist", () => {
                     continue;
                 }
             }
-            // filter by type and growth rate
+            // filter by type, growth rate and generation
             if (!filterByType(pkmnName)) {
                 continue;
             }
             if (!filterByGrowthRate(pkmnName)) {
+                continue;
+            }
+            if (!filterByGeneration(pkmnName)) {
                 continue;
             }
             // find the attempt with the lowest time
@@ -380,11 +410,14 @@ export const useTierlist = defineStore("tierlist", () => {
                     continue;
                 }
             }
-            // filter by type and growth rate
+            // filter by type, growth rate and generation
             if (!filterByType(pkmnName)) {
                 continue;
             }
             if (!filterByGrowthRate(pkmnName)) {
+                continue;
+            }
+            if (!filterByGeneration(pkmnName)) {
                 continue;
             }
             // get the most recent attempt by release date (sort descending and take first)
@@ -586,6 +619,38 @@ export const useTierlist = defineStore("tierlist", () => {
         return labels;
     });
 
+    /// SPECIES ROSTER ///
+
+    /**
+     * Species of the assigned roster, or null when none is assigned. A counted total counts
+     * whole species (getSpeciesRootName), so forms, Megas and partner Pokémon fold into theirs.
+     */
+    const rosterSpecies = computed<Set<string> | null>(() => {
+        const roster = activeTierlist.value.roster;
+        return roster?.length ? new Set(roster.map(getSpeciesRootName)) : null;
+    });
+
+    /**
+     * The Y of "Ranked: X/Y" when it is counted rather than picked from the hand-entered totals:
+     * - a roster is assigned: its species that pass the type / growth rate / generation filters
+     * - no roster, but one of those filters is on: the game's pokedex species that pass them
+     * null means "use the selected hand-entered total".
+     */
+    const countedTotal = computed<{ value: number, source: 'roster' | 'pokedex' } | null>(() => {
+        const roster = activeTierlist.value.roster;
+        if (roster?.length) {
+            const species = new Set(roster.filter(passesSpeciesFilters).map(getSpeciesRootName));
+            return { value: species.size, source: 'roster' };
+        }
+        if (!speciesFiltersActive.value) return null;
+        const game = activeTierlist.value.game;
+        const names = getPokedexEntryNames(game);
+        if (!names) return null;
+        // A form the dex breaks out ("Rotom (Heat)") counts toward its species, once.
+        const species = new Set(names.filter(passesSpeciesFilters).map(n => getPokemonPokedexId(game, n) ?? n));
+        return { value: species.size, source: 'pokedex' };
+    });
+
     function getMetrics(pkmnName: string) {
         return activeAttempts.value.find((entry) => entry.pkmnName === pkmnName)?.attempt ?? {} as Metrics;
     }
@@ -624,6 +689,7 @@ export const useTierlist = defineStore("tierlist", () => {
             excludeTags: [...excludeTagsList.value],
             includeTypes: [...includeTypeList.value],
             includeGrowthRates: [...includeGrowthRateList.value],
+            includeGenerations: [...includeGenerationList.value],
             includeYears: [...includeYearList.value],
             popoutActive: global.popoutActive,
             showBoxArt: global.showBoxArt,
@@ -655,6 +721,7 @@ export const useTierlist = defineStore("tierlist", () => {
         excludeTagsList.value = [...state.excludeTags];
         includeTypeList.value = [...state.includeTypes];
         includeGrowthRateList.value = [...state.includeGrowthRates];
+        includeGenerationList.value = [...(state.includeGenerations ?? [])];
         includeYearList.value = [...state.includeYears];
         global.popoutActive = state.popoutActive;
         global.showBoxArt = state.showBoxArt;
@@ -722,9 +789,13 @@ export const useTierlist = defineStore("tierlist", () => {
         excludeTagsList,
         includeTypeList,
         includeGrowthRateList,
+        includeGenerationList,
         includeYearList,
+        speciesFiltersActive,
         groupedEntries,
         getMetrics,
+        rosterSpecies,
+        countedTotal,
         labels,
         heldBack,
         featuredBetween,

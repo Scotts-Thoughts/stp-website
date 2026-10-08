@@ -15,6 +15,7 @@ import InsertMetricsWindow from './InsertMetricsWindow.vue'
 import InsertCsvMetricsWindow from './InsertCsvMetricsWindow.vue'
 import EditFilterWindow from './EditFilterWindow.vue'
 import EditThresholdsWindow from './EditThresholdsWindow.vue'
+import EditRosterWindow from './EditRosterWindow.vue'
 import SearchWindow from './SearchWindow.vue'
 import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
@@ -121,6 +122,7 @@ const enum Mode {
     EDIT_VIEW,
     EDIT_FILTER,
     EDIT_THRESHOLDS,
+    EDIT_ROSTER,
 }
 
 const mode = ref<Mode>(Mode.VIEWING);
@@ -233,6 +235,13 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
         shortcut: "G",
         action() {
             mode.value = mode.value === Mode.EDIT_THRESHOLDS ? Mode.VIEWING : Mode.EDIT_THRESHOLDS;
+        }
+    },
+    {
+        label: "Assign Species",
+        shortcut: "S",
+        action() {
+            mode.value = mode.value === Mode.EDIT_ROSTER ? Mode.VIEWING : Mode.EDIT_ROSTER;
         }
     },
     {
@@ -847,6 +856,7 @@ onKeyDown('F1', async (e) => {
         <EditViewWindow      :visible="mode === Mode.EDIT_VIEW"      @close="mode = Mode.VIEWING" />
         <EditFilterWindow    :visible="mode === Mode.EDIT_FILTER"    @close="mode = Mode.VIEWING" />
         <EditThresholdsWindow :visible="mode === Mode.EDIT_THRESHOLDS" @close="mode = Mode.VIEWING" />
+        <EditRosterWindow    :visible="mode === Mode.EDIT_ROSTER"    @close="mode = Mode.VIEWING" />
         <SearchWindow        :visible="searchActive"                 @close="searchActive = false" />
         <QuickCalendarPopup  :visible="quickCalendarActive"          @close="quickCalendarActive = false" />
         <ExportChangeAnimationModal

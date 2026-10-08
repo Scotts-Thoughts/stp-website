@@ -347,3 +347,20 @@ export function getPokemonPokedexId(game: string, pokemonName: string): number |
     const pokemonData = getPokemonData(game, pokemonName);
     return pokemonData?.national_dex_number || null;
 }
+
+/**
+ * Every entry key in this game's own pokedex section (species and the forms it breaks out),
+ * or null when the game has no data or it is still loading — the load is started and the
+ * reactive version bump re-runs the calling computed once it lands.
+ */
+export function getPokedexEntryNames(game: string): string[] | null {
+    void pokedexVersion.value;
+    const key = mapGameNameToPokedexKey(game);
+    if (!key) return null;
+    const section = getPokedexData()?.[key];
+    if (!section) {
+        void loadPokedexSection(key);
+        return null;
+    }
+    return Object.keys(section);
+}

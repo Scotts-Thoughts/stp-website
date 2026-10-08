@@ -601,6 +601,7 @@ export const useWorkspace = defineStore("workspace", () => {
         tierlist.thresholds_recent = restored.thresholds_recent;
         tierlist.thresholdDefaults = restored.thresholdDefaults;
         tierlist.thresholdSchedule = restored.thresholdSchedule;
+        tierlist.roster = restored.roster;
         tierlist.entries = restored.entries;
     }
 

@@ -8,6 +8,7 @@ import  { currentDate } from '../utils/time';
 
 import { types as pokemonTypes } from '../utils/pokemon/types';
 import { growthRates as pokemonGrowthRates } from '../utils/pokemon/growth-rates';
+import { generations as pokemonGenerations } from '../utils/pokemon/generations';
 
 defineProps<{
     visible: boolean
@@ -143,6 +144,16 @@ async function selectFolder() {
                     id="filter-growth-rate"
                     :options="pokemonGrowthRates"
                     v-model="tierlist.includeGrowthRateList"
+                    height="200px"
+                /></td>
+            </tr>
+
+            <tr>
+                <td><label for="filter-generation">Generation</label></td>
+                <td><DropdownSelect 
+                    id="filter-generation"
+                    :options="pokemonGenerations"
+                    v-model="tierlist.includeGenerationList"
                     height="200px"
                 /></td>
             </tr>
