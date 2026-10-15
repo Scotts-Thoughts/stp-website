@@ -41,6 +41,13 @@ declare global {
       readProjects: () => Promise<SchedulerProject[] | null>
     }
     isElectron?: boolean
+    /**
+     * Automation hook for a headless driver (the Cutter episode pipeline's
+     * tier-list exporter): records the pending re-ranking as a transparent
+     * .mov at `outputPath`, exactly as "Export Re-Ranking as Video" does, and
+     * resolves whether it was written. Set while a tier list is open.
+     */
+    stpExportRerankingVideo?: (outputPath?: string) => Promise<boolean>
   }
 }
 

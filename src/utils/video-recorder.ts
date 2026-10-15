@@ -110,6 +110,7 @@ export async function recordRerankingAnimation(opts: {
     findOldEl: () => HTMLElement | null;
     applyData: () => void;
     findNewEl: () => HTMLElement | null;
+    outputPath?: string;                           // write here instead of asking with a save dialog
     onProgress: (p: RecordingProgress) => void;
 }): Promise<boolean> {
     const video = window.electronVideo;
@@ -118,7 +119,7 @@ export async function recordRerankingAnimation(opts: {
         return false;
     }
 
-    const outputPath = await video.saveFileDialog('reranking.mov');
+    const outputPath = opts.outputPath ?? await video.saveFileDialog('reranking.mov');
     if (!outputPath) return false;
 
     const progress = makeProgress(opts.onProgress);

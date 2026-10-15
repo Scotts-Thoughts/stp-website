@@ -109,9 +109,14 @@ onMounted(() => {
     };
     const [msg, type] = categoryToast[tierlist.activeCategory] ?? categoryToast.first;
     toast.addToast(msg, type, { timeout: 2000, key: 'view-category' });
+
+    // Automation hook: lets a headless driver record the pending re-ranking
+    // to a path of its choosing, as "Export Re-Ranking as Video" does.
+    window.stpExportRerankingVideo = exportRerankingVideo;
 });
 onUnmounted(() => {
     window.removeEventListener('resize', updateViewportScale);
+    if (window.stpExportRerankingVideo === exportRerankingVideo) delete window.stpExportRerankingVideo;
 });
 
 const enum Mode {
@@ -473,9 +478,10 @@ onKeyDown('Escape', (e) => {
     e.preventDefault();
 });
 
-// Export re-ranking animation as transparent .mov video
-async function exportRerankingVideo() {
-    if (!reranking.hasPending || !root.value) return;
+// Export re-ranking animation as transparent .mov video. With `outputPath`,
+// it is written there instead of asking with a save dialog.
+async function exportRerankingVideo(outputPath?: string): Promise<boolean> {
+    if (!reranking.hasPending || !root.value) return false;
 
     const pending = [...reranking.pendingInsertions];
     const animPokemon = pending[pending.length - 1].pokemon;
@@ -508,6 +514,7 @@ async function exportRerankingVideo() {
         findNewEl() {
             return root.value?.querySelector(`[data-pokemon="${CSS.escape(animPokemon)}"]`) as HTMLElement | null;
         },
+        outputPath,
         onProgress(p) {
             toast.removeToast(recordingToastId);
             if (p.phase === 'capturing') {
@@ -522,7 +529,7 @@ async function exportRerankingVideo() {
         },
     });
 
-    if (!success) return;
+    return success;
 }
 
 /** Set the display date and wait for the tierlist to re-render and its sprites to load. */
