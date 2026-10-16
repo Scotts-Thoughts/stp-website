@@ -739,6 +739,12 @@ export async function recordChangeAnimation(opts: {
             }
         }
 
+        // Paint order follows `anims`, so sprites that change tiers go last: they slide in front
+        // of the other Pokémon instead of behind them. Re-append so the overlay DOM matches.
+        const changesTier = (a: Anim) => a.kind === 'shared' && Math.abs(a.to.top - a.from.top) > 0.5;
+        anims.sort((a, b) => Number(changesTier(a)) - Number(changesTier(b)));
+        for (const a of anims) overlay.appendChild(a.el);
+
         // Hide the real sprites (the backdrop keeps tier rows, labels and counts). Done AFTER
         // cloning so the clones stay visible.
         wrapperEl.querySelectorAll<HTMLElement>(SPRITES).forEach(el => {
