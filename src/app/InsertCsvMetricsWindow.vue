@@ -119,12 +119,6 @@ watch(() => props.visible, async (visible) => {
 });
 
 async function loadFile(file: File) {
-    // Check if filename contains "simple"
-    if (!file.name.toLowerCase().includes('simple')) {
-        errorMessage.value = "File must contain 'simple' in its name";
-        return;
-    }
-
     selectedFile.value = file;
     errorMessage.value = "";
     duplicateWarning.value = "";
