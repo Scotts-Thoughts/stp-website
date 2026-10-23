@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
 import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu, type ContextMenuOptionArg } from '../store';
-import { getBaseSpeciesName, getSpeciesRootName, hasAlternativeMoveType } from '../utils/pokemon';
+import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
 import { recordScrollAnimation } from '../utils/video-recorder';
 
 const emit = defineEmits<{
@@ -306,11 +306,12 @@ const data = computed(() => {
         return true;
     });
     // Count unique species (not forms) by extracting base species names. A counted total
-    // (roster / pokedex) counts whole species, so X is counted the same way as Y.
-    const speciesOf = tierlist.countedTotal ? getSpeciesRootName : getBaseSpeciesName;
+    // (roster / pokedex) counts whole species, and an assigned evolutionary line counts
+    // once, so X is counted the same way as Y.
+    const speciesOf = tierlist.countedTotal ? tierlist.getRosterUnit : getBaseSpeciesName;
     const uniqueSpecies = new Set(rankedEntries.map(entry => speciesOf(entry.pkmnName)));
     // With a roster assigned, only its species count toward X, so X never exceeds Y.
-    const roster = tierlist.rosterSpecies;
+    const roster = tierlist.rosterUnits;
     if (roster) {
         for (const species of uniqueSpecies) {
             if (!roster.has(species)) uniqueSpecies.delete(species);
@@ -1229,8 +1230,8 @@ function sleep(ms: number): Promise<void> {
                 <template v-if="tierlist.countedTotal?.source === 'roster'">
                     <div class="ranked-popover-title">Assigned species</div>
                     <div class="ranked-popover-note">
-                        Total is counted from the {{ tierlist.activeTierlist.roster?.length }} assigned
-                        species{{ tierlist.speciesFiltersActive ? ' that match the active filters' : '' }}.
+                        Total is counted from the {{ tierlist.rosterUnits?.size }} assigned
+                        species{{ tierlist.rosterLines.length ? ' (an evolutionary line counts once)' : '' }}{{ tierlist.speciesFiltersActive ? ' that match the active filters' : '' }}.
                         Edit them with Assign Species (S).
                     </div>
                 </template>

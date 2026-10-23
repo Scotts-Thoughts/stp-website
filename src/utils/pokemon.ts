@@ -1599,6 +1599,25 @@ const SPECIES_ROOT_ALIASES: Record<string, string> = {
     'Tatsugiri Stretchy': 'Tatsugiri',
 };
 
+/** Case- and punctuation-insensitive key: "Shaymin (Land)", "Shaymin-land" -> "shayminland". */
+const looseNameKey = (name: string) =>
+    name.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/♀/g, 'f').replace(/♂/g, 'm')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const knownPokemonNames = new Set<string>(pokemonNames);
+let looseNameIndex: Map<string, string> | undefined;
+
+/**
+ * The pokemonNames spelling of a name saved some other way, or the name unchanged when
+ * there's none. Older tierlist entries use the pokedex data's style ("Shaymin (Land)",
+ * "Kyurem (Black)", "Porygon-Z") or other casing ("Shaymin-sky").
+ */
+export function findPokemonName(name: string): string {
+    if (knownPokemonNames.has(name)) return name;
+    looseNameIndex ??= new Map(pokemonNames.map(n => [looseNameKey(n), n] as const).reverse());
+    return looseNameIndex.get(looseNameKey(name)) ?? name;
+}
+
 /**
  * The species a name ultimately belongs to, looking through everything getBaseSpeciesName
  * keeps: Mega / Primal prefixes, the X / Y / Z Mega variants and alternative-move suffixes.
@@ -1609,7 +1628,7 @@ const SPECIES_ROOT_ALIASES: Record<string, string> = {
  * - "Alolan Marowak" -> "Marowak"
  */
 export function getSpeciesRootName(pokemonName: string): string {
-    let name = removeAlternativeMoveType(pokemonName);
+    let name = findPokemonName(removeAlternativeMoveType(pokemonName));
     const special = /^(?:Mega|Primal) (.+?)(?: [XYZ])?$/.exec(name);
     if (special) name = special[1];
     // Twice: "Galarian Darmanitan-Zen Mode" sheds its form, then its regional prefix.

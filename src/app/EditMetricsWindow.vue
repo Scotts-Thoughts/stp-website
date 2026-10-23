@@ -4,6 +4,8 @@ import Window from '../components/Window.vue'
 import DropdownSelect from '../components/DropdownSelect.vue';
 
 import { useTierlist } from '../store';
+import { getSpeciesRootName } from '../utils/pokemon';
+import { lineFinal } from '../utils/pokemon/evolution-lines';
 import { formatTimeHM, formatTimeFull, parseTime, parseGameTime, formatDate, parseDate } from '../utils/time';
 
 const props = defineProps<{
@@ -45,6 +47,29 @@ const blackouts = ref("-1");
 const numAttempts = ref("-1");
 const numFinishes = ref("-1");
 const releasedate = ref("1970-01-01");
+/** Stage the entry shows; '' is its line's highest stage. */
+const finalForm = ref("");
+
+/**
+ * Stages the entry can show: every stage of the assigned lines it's part of, so an Eevee
+ * entry can pick any of the Eeveelutions assigned. Empty when it isn't in a line.
+ */
+const finalFormOptions = computed(() => {
+    const species = getSpeciesRootName(pokemon.value);
+    const names = new Set<string>();
+    for (const line of tierlist.rosterLines) {
+        if (line.includes(species)) line.forEach(n => names.add(n));
+    }
+    return [...names];
+});
+
+/** What "Highest stage" means for this entry, ignoring its override (same pick as the store). */
+const defaultFinalForm = computed(() => {
+    const species = getSpeciesRootName(pokemon.value);
+    const lines = tierlist.rosterLines;
+    const line = lines.find(l => lineFinal(l) === species) ?? lines.find(l => l.includes(species));
+    return line ? lineFinal(line) : null;
+});
 
 function populateData() {
     const activeTierlist = tierlist.activeTierlist;
@@ -80,6 +105,7 @@ function populateData() {
     numAttempts.value = entry.numAttempts.toString() ?? "-1";
     numFinishes.value = entry.numFinishes.toString() ?? "-1";
     tags.value = entry.tags ?? [];
+    finalForm.value = entry.finalForm ?? "";
 
     releasedate.value = formatDate(attempt.releasedate);
     finished.value = attempt.finished === 1;
@@ -130,6 +156,8 @@ function updateMetric() {
     entry.numAttempts = parseInt(numAttempts.value);
     entry.numFinishes = parseInt(numFinishes.value);
     entry.tags = tags.value.slice();
+    if (finalForm.value) entry.finalForm = finalForm.value;
+    else delete entry.finalForm;
 
     const attempt = entry.attempts[attemptIndex.value];
 
@@ -184,7 +212,7 @@ function deleteRun() {
         </div>
         <table v-else>
             <tbody>
-            <tr><td colspan="2" >{{ pokemon }}</td></tr>
+            <tr><td colspan="2" >{{ pokemon }}<template v-if="tierlist.getDisplayPokemon(pokemon) !== pokemon"> (shown as {{ tierlist.getDisplayPokemon(pokemon) }})</template></td></tr>
 
             <tr><td colspan="2" height="14px"></td></tr>
 
@@ -199,6 +227,16 @@ function deleteRun() {
             <tr>
                 <td><label for="edit_metric_x3">Tags</label></td>
                 <td><DropdownSelect v-model="tags" :options="tierlist.activeTagList" :allow-other="true"/></td>
+            </tr>
+            <tr v-if="finalFormOptions.length || finalForm">
+                <td><label for="edit_metric_x4" title="The stage this run ended on, shown in the tierlist">Final Form</label></td>
+                <td>
+                    <select id="edit_metric_x4" v-model="finalForm">
+                        <option value="">Highest stage{{ defaultFinalForm ? ` (${defaultFinalForm})` : '' }}</option>
+                        <option v-for="name in finalFormOptions" :key="name" :value="name">{{ name }}</option>
+                        <option v-if="finalForm && !finalFormOptions.includes(finalForm)" :value="finalForm">{{ finalForm }}</option>
+                    </select>
+                </td>
             </tr>
 
             <tr><td colspan="2" height="14px"></td></tr>
@@ -261,7 +299,7 @@ tr td:nth-child(2) {
     padding-block: 4px;
     text-align: center;
 }
-input {
+input, select {
     padding: 5px 10px;
     height: 30px;
     width: 100%;

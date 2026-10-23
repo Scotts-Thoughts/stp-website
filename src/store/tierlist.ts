@@ -7,7 +7,8 @@ import { currentDate, formatTimeFull, formatTimeHM, formatTimeHMS, parseDate } f
 
 import { getPokedexEntryNames, getPokemonData, getPokemonPokedexId, hasPokedexData, preloadPokedex } from "../utils/pokemon/pokedex";
 import { getSpeciesGeneration } from "../utils/pokemon/generations";
-import { getSpeciesRootName } from "../utils/pokemon";
+import { getSpeciesRootName, hasAlternativeMoveType } from "../utils/pokemon";
+import { lineFinal } from "../utils/pokemon/evolution-lines";
 import { resolveScheduledLabel } from "../utils/threshold-schedule";
 
 export type Tierlist = {
@@ -33,6 +34,12 @@ export type Tierlist = {
      * generation filters — instead of the hand-entered `total` options.
      */
     roster?: string[]
+    /**
+     * Evolutionary lines picked in Assign Species, each lowest stage to highest. A line
+     * counts as one toward "Ranked" and its entries show the highest stage. Every member is
+     * also in `roster`; a line whose members aren't all assigned is dropped.
+     */
+    rosterLines?: string[][]
     imageSource?: string
     platform?: string
     finalTierLabel?: string
@@ -112,6 +119,8 @@ export type TierlistEntry = {
     numFinishes: number
     tags: string[]
     attempts: Metrics[]
+    /** Stage shown for an entry of an evolutionary line, when the run didn't reach the highest one. */
+    finalForm?: string
 }
 
 const enum TierlistTierIndex {
@@ -630,6 +639,69 @@ export const useTierlist = defineStore("tierlist", () => {
         return roster?.length ? new Set(roster.map(getSpeciesRootName)) : null;
     });
 
+    /** The assigned evolutionary lines, empty when no roster is assigned. */
+    const rosterLines = computed<string[][]>(() =>
+        activeTierlist.value.roster?.length ? activeTierlist.value.rosterLines ?? [] : []);
+
+    /**
+     * Species -> the line it belongs to. A line's own highest stage wins, then the first line
+     * listing it, so a shared pre-evolution (Eevee) falls to the first of its branches.
+     */
+    const lineOfSpecies = computed(() => {
+        const map = new Map<string, string[]>();
+        for (const line of rosterLines.value) map.set(lineFinal(line), line);
+        for (const line of rosterLines.value) {
+            for (const name of line) if (!map.has(name)) map.set(name, line);
+        }
+        return map;
+    });
+
+    /** The evolutionary line an entry belongs to, if any; its final form override picks the branch. */
+    function getEntryLine(pkmnName: string): string[] | undefined {
+        const override = activeTierlist.value.entries[pkmnName]?.finalForm;
+        return lineOfSpecies.value.get(getSpeciesRootName(override ?? pkmnName));
+    }
+
+    /**
+     * How many entries with runs each line has (by its highest stage). Alternative move
+     * entries ("Vulpix-egg-moves") are ranked apart, so they don't count.
+     */
+    const lineEntryCounts = computed(() => {
+        const counts = new Map<string, number>();
+        for (const [name, entry] of Object.entries(activeTierlist.value.entries)) {
+            if (!entry.attempts.length || hasAlternativeMoveType(name)) continue;
+            const line = getEntryLine(name);
+            if (line) counts.set(lineFinal(line), (counts.get(lineFinal(line)) ?? 0) + 1);
+        }
+        return counts;
+    });
+
+    /**
+     * The Pokémon an entry's image shows: its final form override, else the highest stage of
+     * its line when it's the line's only entry. A tierlist that ranks each stage separately
+     * (Charmander, Charmeleon and Charizard) keeps every stage's own image. Forms and
+     * alternative move entries keep their own image too.
+     */
+    function getDisplayPokemon(pkmnName: string): string {
+        const override = activeTierlist.value.entries[pkmnName]?.finalForm;
+        if (override) return override;
+        const line = getEntryLine(pkmnName);
+        if (!line || getSpeciesRootName(pkmnName) !== pkmnName) return pkmnName;
+        return (lineEntryCounts.value.get(lineFinal(line)) ?? 0) <= 1 ? lineFinal(line) : pkmnName;
+    }
+
+    /** What an entry counts as toward a counted "Ranked": its line's highest stage, else its species. */
+    function getRosterUnit(pkmnName: string): string {
+        const line = getEntryLine(pkmnName);
+        return line ? lineFinal(line) : getSpeciesRootName(pkmnName);
+    }
+
+    /** The units "Ranked" counts against the roster: one per line, one per species outside a line. */
+    const rosterUnits = computed<Set<string> | null>(() => {
+        const roster = activeTierlist.value.roster;
+        return roster?.length ? new Set(roster.map(getRosterUnit)) : null;
+    });
+
     /**
      * The Y of "Ranked: X/Y" when it is counted rather than picked from the hand-entered totals:
      * - a roster is assigned: its species that pass the type / growth rate / generation filters
@@ -639,8 +711,11 @@ export const useTierlist = defineStore("tierlist", () => {
     const countedTotal = computed<{ value: number, source: 'roster' | 'pokedex' } | null>(() => {
         const roster = activeTierlist.value.roster;
         if (roster?.length) {
-            const species = new Set(roster.filter(passesSpeciesFilters).map(getSpeciesRootName));
-            return { value: species.size, source: 'roster' };
+            // A line passes the filters on its highest stage, the one its entries show.
+            const units = new Set(roster
+                .filter(name => passesSpeciesFilters(lineOfSpecies.value.has(getSpeciesRootName(name)) ? getRosterUnit(name) : name))
+                .map(getRosterUnit));
+            return { value: units.size, source: 'roster' };
         }
         if (!speciesFiltersActive.value) return null;
         const game = activeTierlist.value.game;
@@ -795,6 +870,11 @@ export const useTierlist = defineStore("tierlist", () => {
         groupedEntries,
         getMetrics,
         rosterSpecies,
+        rosterLines,
+        rosterUnits,
+        getEntryLine,
+        getDisplayPokemon,
+        getRosterUnit,
         countedTotal,
         labels,
         heldBack,

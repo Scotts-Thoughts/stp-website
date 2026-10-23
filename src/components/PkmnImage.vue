@@ -40,8 +40,12 @@ const settings = computed(() => {
 
 const imageError = ref(false);
 
+// An entry of an evolutionary line shows its highest stage (or its final form override).
+// Only the picture changes: selection and view settings stay keyed by the entry's name.
+const displayed = computed(() => tierlist.getDisplayPokemon(props.pokemon));
+
 const imagePath = computed(() => resolvePokemonImagePath(
-    props.pokemon,
+    displayed.value,
     tierlist.activeTierlist.imageSource,
     tierlist.activeTierlist.game,
     imageError.value,
@@ -49,13 +53,13 @@ const imagePath = computed(() => resolvePokemonImagePath(
 
 function onImageError() {
     // If form-specific image fails, try base species name
-    if (!imageError.value && props.pokemon !== getBaseSpeciesName(props.pokemon)) {
+    if (!imageError.value && displayed.value !== getBaseSpeciesName(displayed.value)) {
         imageError.value = true;
     }
 }
 
 // Reset error state when pokemon changes
-watch(() => props.pokemon, () => {
+watch(displayed, () => {
     imageError.value = false;
 });
 

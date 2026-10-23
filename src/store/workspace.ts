@@ -602,6 +602,7 @@ export const useWorkspace = defineStore("workspace", () => {
         tierlist.thresholdDefaults = restored.thresholdDefaults;
         tierlist.thresholdSchedule = restored.thresholdSchedule;
         tierlist.roster = restored.roster;
+        tierlist.rosterLines = restored.rosterLines;
         tierlist.entries = restored.entries;
     }
 
@@ -733,6 +734,7 @@ function parseTierlist(data: string): Tierlist | undefined {
         entry.numAttempts = entryRaw.numAttempts ?? -1;
         entry.numFinishes = entryRaw.numFinishes ?? -1;
         entry.tags        = entryRaw.tags ?? [];
+        if (entryRaw.finalForm) entry.finalForm = entryRaw.finalForm;
 
         entry.attempts = [];
         for (const attemptRaw of entryRaw.attempts) {
@@ -830,6 +832,9 @@ function stringifyTierlist(tierlist: Tierlist): string {
         entryRaw.numFinishes = entry.numFinishes;
         if (entry.tags.length > 0) {
             entryRaw.tags = entry.tags;
+        }
+        if (entry.finalForm) {
+            entryRaw.finalForm = entry.finalForm;
         }
 
         entryRaw.attempts = [];

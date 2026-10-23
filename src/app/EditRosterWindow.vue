@@ -3,8 +3,9 @@ import { computed, ref } from 'vue';
 import Window from '../components/Window.vue'
 
 import { useTierlist } from '../store';
-import { pokemonNames, getSpeciesRootName, hasAlternativeMoveType } from '../utils/pokemon';
+import { pokemonNames, findPokemonName, getSpeciesRootName, hasAlternativeMoveType } from '../utils/pokemon';
 import { generations, getNationalDexNumber, getSpeciesGeneration } from '../utils/pokemon/generations';
+import { getEvolutionLines, lineFinal, lineGeneration, lineNewest } from '../utils/pokemon/evolution-lines';
 
 defineProps<{
     visible: boolean
@@ -42,14 +43,25 @@ const roster = computed(() => tierlist.activeTierlist.roster ?? []);
 const rosterSet = computed(() => new Set(roster.value));
 const rosterSpeciesCount = computed(() => new Set(roster.value.map(getSpeciesRootName)).size);
 
-/** Writes the roster back in dex order; an empty roster is removed so the hand-entered totals apply again. */
-function setRoster(names: Iterable<string>) {
+const lines = computed(() => tierlist.activeTierlist.rosterLines ?? []);
+const lineKey = (line: string[]) => line.join('>');
+const lineKeys = computed(() => new Set(lines.value.map(lineKey)));
+
+/**
+ * Writes the roster back in dex order; an empty roster is removed so the hand-entered totals
+ * apply again. A line survives only while every one of its members is still assigned.
+ */
+function setRoster(names: Iterable<string>, keepLines: string[][] = lines.value) {
     const list = [...new Set(names)].sort(compareNames);
+    const assigned = new Set(list);
+    const kept = keepLines.filter(line => line.every(name => assigned.has(name)));
     tierlist.activeTierlist.roster = list.length ? list : undefined;
+    tierlist.activeTierlist.rosterLines = kept.length ? kept : undefined;
 }
 
+/** Assigned in pokemonNames' spelling, so an entry saved as "Porygon-Z" is assigned as "PorygonZ". */
 function addNames(names: string[]) {
-    setRoster([...roster.value, ...names]);
+    setRoster([...roster.value, ...names.map(findPokemonName)]);
 }
 
 function removeNames(names: string[]) {
@@ -60,6 +72,34 @@ function removeNames(names: string[]) {
 function toggleName(name: string) {
     if (rosterSet.value.has(name)) removeNames([name]);
     else addNames([name]);
+}
+
+/**
+ * Assigns lines, members and all. A line replaces any assigned line it overlaps on a final
+ * stage, so "Magnemite, Magneton" (picked with Gen 1) gives way to "..., Magnezone" (Gen 1-4),
+ * while Eevee's branches, which only share Eevee, sit side by side.
+ */
+function addLines(newLines: string[][]) {
+    let kept = lines.value;
+    for (const line of newLines) {
+        kept = kept.filter(old => !line.includes(lineFinal(old)) && !old.includes(lineFinal(line)));
+        kept = [...kept, line];
+    }
+    setRoster([...roster.value, ...newLines.flat()], kept);
+}
+
+/** Unassigns lines, keeping members another assigned line still needs (Eevee for its other branches). */
+function removeLines(oldLines: string[][]) {
+    const drop = new Set(oldLines.map(lineKey));
+    const kept = lines.value.filter(line => !drop.has(lineKey(line)));
+    const needed = new Set(kept.flat());
+    const unassign = new Set(oldLines.flat().filter(name => !needed.has(name)));
+    setRoster(roster.value.filter(n => !unassign.has(n)), kept);
+}
+
+function toggleLine(line: string[]) {
+    if (lineKeys.value.has(lineKey(line))) removeLines([line]);
+    else addLines([line]);
 }
 
 /// GENERATION RANGE ///
@@ -80,6 +120,44 @@ const rangeNames = computed(() => {
         return kind === 'species' || (kind === 'form' && includeForms.value) || (kind === 'mega' && includeMegas.value);
     });
 });
+
+/** Lists the range one checkbox per evolutionary line instead of one per species. */
+const byLine = ref(false);
+
+/** The range's species as evolutionary lines; forms and Megas aren't part of a line. */
+const rangeLines = computed(() => getEvolutionLines(rangeNames.value.filter(n => nameKind(n) === 'species')));
+const rangeExtras = computed(() => rangeNames.value.filter(n => nameKind(n) !== 'species'));
+
+/** Rows of the range list: lines (or single species) followed by forms and Megas. */
+const rangeRows = computed(() => byLine.value
+    ? [...rangeLines.value.map(line => ({ key: lineKey(line), names: line })), ...rangeExtras.value.map(n => ({ key: n, names: [n] }))]
+    : rangeNames.value.map(n => ({ key: n, names: [n] })));
+
+/** A row is a line when it lists more than one stage; a lone species toggles like any other name. */
+function rowChecked(names: string[]) {
+    return names.length > 1 ? lineKeys.value.has(lineKey(names)) : rosterSet.value.has(names[0]);
+}
+
+/** Every stage is assigned, but separately, so they count as separate species. */
+function rowLoose(names: string[]) {
+    return names.length > 1 && !rowChecked(names) && names.every(n => rosterSet.value.has(n));
+}
+
+function toggleRow(names: string[]) {
+    if (names.length > 1) toggleLine(names);
+    else toggleName(names[0]);
+}
+
+const multiStageRangeLines = computed(() => rangeLines.value.filter(line => line.length > 1));
+
+function addRange() {
+    if (byLine.value) addLines(multiStageRangeLines.value);
+    addNames(rangeNames.value);
+}
+
+function replaceWithRange() {
+    setRoster(rangeNames.value, byLine.value ? multiStageRangeLines.value : []);
+}
 
 const rangeLabel = computed(() => {
     const lo = Math.min(genFrom.value, genTo.value);
@@ -109,15 +187,37 @@ function addFirstResult() {
 
 /// ASSIGNED LIST ///
 
+type AssignedItem = { key: string, label: string, line?: string[], name?: string };
+
+/** Assigned lines and the species outside them, by generation (a line by its newest member's). */
 const groupedRoster = computed(() => {
-    const groups = new Map<string, string[]>();
-    for (const name of roster.value) {
-        const gen = getSpeciesGeneration(name) ?? 'Unknown';
+    const inLine = new Set(lines.value.flat());
+    const items: { gen: string, sortName: string, item: AssignedItem }[] = [
+        ...lines.value.map(line => ({
+            gen: lineGeneration(line) ?? 'Unknown',
+            sortName: lineNewest(line),
+            item: { key: lineKey(line), label: line.join(' → '), line },
+        })),
+        ...roster.value.filter(n => !inLine.has(n)).map(name => ({
+            gen: getSpeciesGeneration(name) ?? 'Unknown',
+            sortName: name,
+            item: { key: name, label: name, name },
+        })),
+    ].sort((a, b) => compareNames(a.sortName, b.sortName));
+
+    const groups = new Map<string, AssignedItem[]>();
+    for (const { gen, item } of items) {
         if (!groups.has(gen)) groups.set(gen, []);
-        groups.get(gen)!.push(name);
+        groups.get(gen)!.push(item);
     }
-    return [...groups].map(([gen, names]) => ({ gen, names }));
+    return [...groups].map(([gen, items]) => ({ gen, items }));
 });
+
+function removeItems(items: AssignedItem[]) {
+    const groupLines = items.flatMap(item => item.line ? [item.line] : []);
+    if (groupLines.length) removeLines(groupLines);
+    removeNames(items.flatMap(item => item.name ? [item.name] : []));
+}
 
 /** Tierlist entries whose species isn't assigned yet; they still show, but don't count toward "Ranked". */
 const unassignedEntries = computed(() => {
@@ -134,7 +234,10 @@ const unassignedEntries = computed(() => {
         <div class="roster-window">
             <div class="summary">
                 <template v-if="roster.length">
-                    <span><b>{{ rosterSpeciesCount }}</b> species assigned<template v-if="roster.length !== rosterSpeciesCount"> ({{ roster.length }} entries incl. forms)</template></span>
+                    <span>
+                        <b>{{ rosterSpeciesCount }}</b> species assigned<template v-if="roster.length !== rosterSpeciesCount"> ({{ roster.length }} entries incl. forms)</template><template v-if="lines.length">,
+                        <b>{{ lines.length }}</b> evolutionary lines. Ranked counts <b>{{ tierlist.rosterUnits?.size }}</b></template>
+                    </span>
                     <button class="btn danger" @click="setRoster([])">Clear all</button>
                 </template>
                 <span v-else class="muted">No species assigned — the Ranked total uses the hand-entered totals.</span>
@@ -154,12 +257,26 @@ const unassignedEntries = computed(() => {
                 </label>
                 <label class="check"><input type="checkbox" v-model="includeForms" /> Regional &amp; alternate forms</label>
                 <label class="check"><input type="checkbox" v-model="includeMegas" /> Megas &amp; Primals</label>
+                <label class="check" title="One checkbox per evolutionary line: it counts as one run, shown as its highest stage">
+                    <input type="checkbox" v-model="byLine" /> Evolutionary lines
+                </label>
             </div>
             <div class="gen-row">
-                <button class="btn add" @click="addNames(rangeNames)">Add {{ rangeLabel }}</button>
-                <button class="btn" @click="setRoster(rangeNames)">Replace with {{ rangeLabel }}</button>
+                <button class="btn add" @click="addRange">Add {{ rangeLabel }}</button>
+                <button class="btn" @click="replaceWithRange">Replace with {{ rangeLabel }}</button>
                 <button class="btn danger" @click="removeNames(rangeNames)">Remove {{ rangeLabel }}</button>
-                <span class="muted">{{ rangeNames.length }} entries</span>
+                <span class="muted">{{ rangeNames.length }} entries<template v-if="byLine">, {{ rangeRows.length }} rows</template></span>
+            </div>
+            <div class="range-list">
+                <label
+                    v-for="row in rangeRows" :key="row.key"
+                    class="range-row" :class="{ on: rowChecked(row.names), loose: rowLoose(row.names) }"
+                    :title="rowLoose(row.names) ? 'Assigned as separate species. Check to count them as one line.' : ''"
+                >
+                    <input type="checkbox" :checked="rowChecked(row.names)" @change="toggleRow(row.names)" />
+                    <span class="range-names">{{ row.names.join(', ') }}</span>
+                    <span class="gen-tag">{{ lineGeneration(row.names)?.replace('Gen ', 'G') }}</span>
+                </label>
             </div>
 
             <div class="section-title">Individual Pokémon, forms &amp; Megas</div>
@@ -195,19 +312,19 @@ const unassignedEntries = computed(() => {
                 <div v-for="group in groupedRoster" :key="group.gen" class="group">
                     <div class="group-head">
                         <span>{{ group.gen }}</span>
-                        <span class="muted">{{ group.names.length }}</span>
-                        <button class="btn small danger" @click="removeNames(group.names)">Remove</button>
+                        <span class="muted">{{ group.items.length }}</span>
+                        <button class="btn small danger" @click="removeItems(group.items)">Remove</button>
                     </div>
                     <div class="chips">
-                        <span v-for="name in group.names" :key="name" class="chip on static">
-                            {{ name }}
-                            <button class="x" title="Remove" @click="removeNames([name])">&times;</button>
+                        <span v-for="item in group.items" :key="item.key" class="chip on static" :class="{ line: item.line }">
+                            {{ item.label }}
+                            <button class="x" title="Remove" @click="removeItems([item])">&times;</button>
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div class="hint">The Ranked total counts assigned species that match the Type / Growth Rate / Generation filters. Ctrl+S to save.</div>
+            <div class="hint">The Ranked total counts assigned species that match the Type / Growth Rate / Generation filters. An evolutionary line counts once and shows its highest stage (change it per Pokémon in Edit Metrics). Ctrl+S to save.</div>
         </div>
     </Window>
 </template>
@@ -265,6 +382,22 @@ const unassignedEntries = computed(() => {
     padding: 6px 10px; border: 1px solid #7a6a2a; background: rgba(122, 106, 42, 0.15); border-radius: 4px;
     color: #ddc; font-size: 14px;
 }
+
+.range-list {
+    max-height: 200px; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 10px;
+    padding: 4px; border: 1px solid #333; border-radius: 4px; background: #1c1c1c;
+}
+.range-row {
+    display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 3px;
+    color: #aaa; font-size: 13px; cursor: pointer;
+}
+.range-row:hover { background: #2a2a2a; color: white; }
+.range-row.on { color: #cfc; }
+.range-row.loose { color: #ddc; }
+.range-row .range-names { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.range-row .gen-tag { color: #777; font-size: 11px; }
+.chip.line { border-style: dashed; }
 
 .assigned { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; color: #ddd; font-size: 15px; }
