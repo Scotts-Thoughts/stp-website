@@ -1,7 +1,7 @@
 {
   "name": "pokemon-tierlist-creator",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "A tierlist creator for ranking Pokemon solo challenge playthroughs",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -70,6 +70,12 @@
         "portable"
       ],
       "icon": "build/icon.png"
+    },
+    "nsis": {
+      "artifactName": "Pokemon-Tierlist-Creator-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Pokemon-Tierlist-Creator-${version}.${ext}"
     },
     "mac": {
       "target": [

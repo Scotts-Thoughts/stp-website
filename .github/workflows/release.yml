@@ -28,6 +28,8 @@ jobs:
           name: windows-installer
           path: |
             release/*.exe
+            release/*.blockmap
+            release/latest.yml
 
   publish:
     needs: [build-windows]
