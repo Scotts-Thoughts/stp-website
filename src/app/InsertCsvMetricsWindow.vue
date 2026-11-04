@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue';
 import Window from '../components/Window.vue'
 import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
 import { parseTime, parseGameTime, parseDate, currentDate } from '../utils/time';
-import { getBaseSpeciesName, appendAlternativeMoveType, POKEMON_FORMS, buildFormName } from '../utils/pokemon';
+import { getBaseSpeciesName, appendAlternativeMoveType, findPokemonName, POKEMON_FORMS, buildFormName } from '../utils/pokemon';
 
 const props = defineProps<{
     visible: boolean
@@ -193,7 +193,8 @@ function parseCsvData(content: string) {
         errorMessage.value = "";
 
         // Populate editable fields from parsed data
-        editPokemonSpecies.value = row.pokemon || "";
+        // Splits files spell species their own way ("Porygon-Z", "porygon z"); use the app's spelling.
+        editPokemonSpecies.value = findPokemonName(row.pokemon || "");
         editRealtime.value = row.real_time_hmmss || "";
         editGametime.value = row.game_time || "";
         editLevel.value = row.level || "";

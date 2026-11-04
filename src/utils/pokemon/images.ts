@@ -1,5 +1,6 @@
 import {
     getBaseSpeciesName,
+    findPokemonName,
     getFormNameForFile,
     removeAlternativeMoveType,
     sanitizePokemonFileName,
@@ -33,7 +34,8 @@ export function resolvePokemonImagePath(
     useBaseSpecies = false,
 ): string {
     // Remove alternative move type suffix before processing image path
-    let pokemonName = removeAlternativeMoveType(useBaseSpecies ? getBaseSpeciesName(pokemon) : pokemon);
+    // and match the name to pokemonNames' spelling, so an entry saved as "Porygon-Z" finds PorygonZ.webp
+    let pokemonName = findPokemonName(removeAlternativeMoveType(useBaseSpecies ? getBaseSpeciesName(pokemon) : pokemon));
 
     // Handle regional forms (space-separated, e.g., "Alolan Marowak" -> "Alolan-Marowak")
     const isRegionalForm = REGIONAL_PREFIXES.some(prefix => pokemonName.startsWith(prefix + ' '));
