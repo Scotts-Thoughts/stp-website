@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue';
 import Window from '../components/Window.vue'
 import { useWorkspace, useGlobal, useReranking, useToast } from '../store';
 import { parseTime, parseGameTime, parseDate, currentDate } from '../utils/time';
-import { getBaseSpeciesName, appendAlternativeMoveType, findPokemonName, POKEMON_FORMS, buildFormName } from '../utils/pokemon';
+import { getBaseSpeciesName, appendAlternativeMoveType, findEntryName, findPokemonName, POKEMON_FORMS, buildFormName } from '../utils/pokemon';
 
 const props = defineProps<{
     visible: boolean
@@ -100,7 +100,9 @@ const finalPokemonName = computed(() => {
     
     // Append alternative move type if selected
     const altMoveType = alternativeMoveType.value ? (alternativeMoveType.value as 'egg-moves' | 'event-pokemon' | 'cross-generation') : null;
-    return appendAlternativeMoveType(name, altMoveType);
+    // Stack onto the entry this Pokemon already has, however that entry is spelled
+    const entries = useWorkspace().activeTierlist?.entries ?? {};
+    return findEntryName(appendAlternativeMoveType(name, altMoveType), entries);
 });
 
 // Reset form when parsed data changes

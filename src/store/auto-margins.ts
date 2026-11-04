@@ -114,7 +114,7 @@ function placement(pkmnName: string, silhouette: Silhouette): Placement {
     };
 }
 
-function store(pair: Pair, value: number) {
+function store(pair: Pair, value: number, overwrite = false) {
     const workspace = useWorkspace();
     const key = removeAlternativeMoveType(pair.right);
     const settings = workspace.pokemonSettings[key] ??= {
@@ -126,7 +126,7 @@ function store(pair: Pair, value: number) {
     };
     settings.margins ??= {};
     // A value set by hand in the meantime wins.
-    if (settings.margins[pair.left] === undefined) settings.margins[pair.left] = value;
+    if (overwrite || settings.margins[pair.left] === undefined) settings.margins[pair.left] = value;
 }
 
 /** The automatic margin for a pair, from silhouettes already loaded; undefined if one isn't. */
@@ -158,6 +158,54 @@ async function fillMargins(pairs: Pair[]) {
         const value = await autoMarginFor(pair);
         if (value !== null && useWorkspace().activeTierlist.filename === tierlist) store(pair, value);
     }
+}
+
+/** Each selected Pokemon with the neighbour it currently has on its left. */
+export function selectedPairs(): Pair[] {
+    const selected = useTierlist().selectedPkmn;
+    return currentPairs().filter(p => selected.has(p.right));
+}
+
+/**
+ * Every pair worth spacing on the active tierlist: the rows on screen, plus any pair of
+ * its Pokemon with a stored margin, which covers the other categories and dates.
+ */
+export function wholeTierlistPairs(): Pair[] {
+    const workspace = useWorkspace();
+    const names = Object.keys(workspace.activeTierlist.entries);
+    const lefts = new Set(names);
+    const pairs = new Map<string, Pair>();
+    const add = (pair: Pair) => {
+        const key = pairKey({ left: pair.left, right: removeAlternativeMoveType(pair.right) });
+        if (!pairs.has(key)) pairs.set(key, pair);
+    };
+
+    currentPairs().forEach(add);
+    for (const right of new Set(names.map(removeAlternativeMoveType))) {
+        for (const left of Object.keys(workspace.pokemonSettings[right]?.margins ?? {})) {
+            if (lefts.has(left)) add({ left, right });
+        }
+    }
+    return [...pairs.values()];
+}
+
+/**
+ * Sets these pairs to their automatic margin, replacing any stored value. A pair whose art
+ * can't be read keeps what it had. Nothing changes if the tierlist is left in the meantime.
+ */
+export async function applyAutoMargins(pairs: Pair[]): Promise<{ applied: number, missingArt: number } | null> {
+    const tierlist = useWorkspace().activeTierlist.filename;
+    const values: { pair: Pair, value: number | null }[] = [];
+    for (const pair of pairs) values.push({ pair, value: await autoMarginFor(pair) });
+    if (useWorkspace().activeTierlist.filename !== tierlist) return null;
+
+    let applied = 0;
+    for (const { pair, value } of values) {
+        if (value === null) continue;
+        store(pair, value, true);
+        applied++;
+    }
+    return { applied, missingArt: values.length - applied };
 }
 
 /** Loads the art of these entries ahead of time, so their margins can be filled synchronously. */

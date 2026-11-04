@@ -1619,6 +1619,55 @@ export function findPokemonName(name: string): string {
 }
 
 /**
+ * The key a tierlist already uses for a name, however either is spelled, so a splits file's
+ * "Porygon-Z" stacks onto an existing "PorygonZ" entry. Without an existing entry it's the
+ * pokemonNames spelling.
+ */
+export function findEntryName(name: string, entries: Record<string, unknown>): string {
+    const known = findPokemonName(name);
+    if (known in entries) return known;
+    const key = looseNameKey(known);
+    return Object.keys(entries).find(entry => looseNameKey(entry) === key) ?? known;
+}
+
+type MergeableEntry = {
+    numAttempts: number,
+    numFinishes: number,
+    tags: string[],
+    finalForm?: string,
+    attempts: { releasedate?: number }[],
+};
+
+/**
+ * Folds entries that are one Pokemon under two spellings ("PorygonZ" and "Porygon-Z") into the
+ * pokemonNames spelling. Attempts are re-sorted by date because "first" and "recent" read
+ * them by position. Entries with a unique spelling are left alone.
+ */
+export function mergeSpellingDuplicates(entries: Record<string, MergeableEntry>): void {
+    const groups = new Map<string, string[]>();
+    for (const name of Object.keys(entries)) {
+        const key = looseNameKey(name);
+        groups.set(key, [...(groups.get(key) ?? []), name]);
+    }
+    for (const names of groups.values()) {
+        if (names.length < 2) continue;
+        const targetName = names.find(name => knownPokemonNames.has(name)) ?? names[0];
+        const target = entries[targetName];
+        for (const name of names) {
+            if (name === targetName) continue;
+            const other = entries[name];
+            target.attempts.push(...other.attempts);
+            target.tags = [...new Set([...target.tags, ...other.tags])];
+            target.finalForm ??= other.finalForm;
+            target.numAttempts = Math.max(target.numAttempts, other.numAttempts);
+            target.numFinishes = Math.max(target.numFinishes, other.numFinishes);
+            delete entries[name];
+        }
+        target.attempts.sort((a, b) => (a.releasedate ?? 0) - (b.releasedate ?? 0));
+    }
+}
+
+/**
  * The species a name ultimately belongs to, looking through everything getBaseSpeciesName
  * keeps: Mega / Primal prefixes, the X / Y / Z Mega variants and alternative-move suffixes.
  * Examples:

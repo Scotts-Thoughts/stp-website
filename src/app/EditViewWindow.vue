@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import Window from '../components/Window.vue'
-import { useTierlist, useWorkspace } from '../store';
-import { onKeyStroke } from '@vueuse/core';
+import { isTypingTarget, useShortcuts, useTierlist, useWorkspace } from '../store';
+import { useEventListener } from '@vueuse/core';
 import { removeAlternativeMoveType } from '../utils/pokemon';
 import { MARGIN_MIN, MARGIN_MAX } from '../utils/auto-margin';
-import { autoMarginFor } from '../store/auto-margins';
+import { autoMarginSelected, autoMarginWholeTierlist, resetAllStyleWholeTierlist, resetStyleWholeTierlist } from '../store/style-actions';
 
 
 const VIEW_PROPERTY_MAP = {
@@ -15,8 +15,8 @@ const VIEW_PROPERTY_MAP = {
         max: 1,
         step: 0.05,
         shiftStep: 0.01,
-        incKey: 'D',
-        decKey: 'A',
+        incAction: 'scale-inc',
+        decAction: 'scale-dec',
         format: (v: number) => "" + ((v * 100) | 0),
     },
     'offset': {
@@ -25,8 +25,8 @@ const VIEW_PROPERTY_MAP = {
         max: 50,
         step: 5,
         shiftStep: 1,
-        incKey: 'W',
-        decKey: 'S',
+        incAction: 'offset-inc',
+        decAction: 'offset-dec',
         format: (v: number) => (v | 0) + 'px',
     },
     'saturation': {
@@ -35,8 +35,8 @@ const VIEW_PROPERTY_MAP = {
         max: 2,
         step: 0.05,
         shiftStep: 0.01,
-        incKey: 'E',
-        decKey: 'Q',
+        incAction: 'saturation-inc',
+        decAction: 'saturation-dec',
         format: (v: number) => v.toFixed(2),
     },
     'margin': {
@@ -45,8 +45,8 @@ const VIEW_PROPERTY_MAP = {
         max: MARGIN_MAX,
         step: 1,
         shiftStep: 1,
-        incKey: 'G',
-        decKey: 'F',
+        incAction: 'margin-inc',
+        decAction: 'margin-dec',
         format: (v: number) => (v | 0) + 'px',
     },
     'flip': {
@@ -55,8 +55,8 @@ const VIEW_PROPERTY_MAP = {
         max: 1,
         step: 1,
         shiftStep: 1,
-        incKey: 'H',
-        decKey: 'J',
+        incAction: 'flip-inc',
+        decAction: 'flip-dec',
         format: (v: number) => v === 1 ? 'Yes' : 'No',
     },
 };
@@ -73,6 +73,12 @@ defineEmits<{
 
 const workspace = useWorkspace();
 const tierlist = useTierlist();
+const shortcuts = useShortcuts();
+
+function keyHint(property: { incAction: string, decAction: string }) {
+    const keys = [property.incAction, property.decAction].map(shortcuts.bindingOf).filter(Boolean);
+    return keys.length ? `(${keys.join('/')})` : '';
+}
 
 const customPosition = ref<{ x: number, y: number } | null>(null);
 
@@ -135,17 +141,6 @@ function updateViewSettings(key: ViewPropertyKey, updater: (oldValue: number) =>
 }
 
 
-/** Sets the margin to the one worked out from the two pieces of art (as for a newly added Pokemon). */
-async function applyAutoMargin() {
-    const right = tierlist.activePkmn;
-    const left = tierlist.activePrev;
-    if (right === '' || left === '') return;
-    const value = await autoMarginFor({ left, right });
-    // Ignore the result if the selection moved on while the art was loading.
-    if (value === null || tierlist.activePkmn !== right || tierlist.activePrev !== left) return;
-    updateViewSettings('margin', () => value);
-}
-
 function inputHandler(e: Event, key: ViewPropertyKey) {
     const target = e.target as HTMLInputElement;
     let value = parseFloat(target.value);
@@ -158,9 +153,11 @@ function switchHandler(e: Event) {
     updateViewSettings('flip', () => value);
 }
 
+const WINDOW_HEIGHT = 420; // Estimated height
+
 function calculateCenterPosition() {
     const windowWidth = 400;
-    const windowHeight = 300;
+    const windowHeight = WINDOW_HEIGHT;
     
     const x = (window.innerWidth - windowWidth) / 2;
     const y = (window.innerHeight - windowHeight) / 2;
@@ -196,7 +193,7 @@ function calculateSmartPosition() {
     const pkmnRect = pkmnElement.getBoundingClientRect();
     const tierRect = tierRow.getBoundingClientRect();
     const windowWidth = 400; // EditViewWindow width
-    const windowHeight = 300; // Estimated height
+    const windowHeight = WINDOW_HEIGHT;
     const paddingBelow = 5; // Padding when window appears below Pokemon
     const paddingAbove = 25; // Account for dropshadow - more aggressive negative padding to bring window closer when above Pokemon
 
@@ -278,16 +275,15 @@ watch(() => Array.from(tierlist.selectedPkmn), async () => {
     }
 });
 
-onKeyStroke((e) => {
-    if (!props.visible) return;
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
+// Capture phase: while this window is open its keys win over the same keys on the tier
+// list (F is Margin Down here, Edit Filter there).
+useEventListener(window, 'keydown', (e: KeyboardEvent) => {
+    if (!props.visible || isTypingTarget(e.target)) return;
 
     for (const [key, property] of Object.entries(VIEW_PROPERTY_MAP)) {
-        const k = e.key.toUpperCase();
-        const dir = k === property.incKey ?  1 :
-                    k === property.decKey ? -1 : 0;
+        const dir = shortcuts.matches(property.incAction, e, { shiftIsFine: true }) ?  1 :
+                    shortcuts.matches(property.decAction, e, { shiftIsFine: true }) ? -1 : 0;
         if (dir !== 0) {
-            // console.log("asd", e.key, e.key.toUpperCase(), "asd", property);
             updateViewSettings(key as any, (value) => {
                 value += dir * (e.shiftKey ? property.shiftStep : property.step);
                 if (value < property.min) value = property.min;
@@ -295,15 +291,16 @@ onKeyStroke((e) => {
                 return value;
             })
             e.preventDefault();
+            e.stopPropagation();
             return;
         }
     }
-})
+}, { capture: true });
 </script>
 
 
 <template>
-    <Window title="Edit View" :visible="visible" :width="400" :custom-position="customPosition" @close="$emit('close')">
+    <Window class="edit-view-window" title="Edit View" :visible="visible" :width="400" :custom-position="customPosition" @close="$emit('close')">
         <div v-if="viewSettings === undefined" style="width: 100%; text-align: center; padding: 20px;">
             Select a Pokemon to edit view settings
         </div>
@@ -318,16 +315,26 @@ onKeyStroke((e) => {
                         <input type="checkbox" :checked="viewSettings[key] === 1" @change="switchHandler" />
                         <span class="slider"></span>
                     </label>&nbsp;&nbsp;
-                    {{ property.format(viewSettings[key]) }} ({{ property.incKey }}/{{ property.decKey }})
+                    {{ property.format(viewSettings[key]) }} {{ keyHint(property) }}
                 </template>
                 <template v-else>
                     <input :value="viewSettings[key]" @input="e => inputHandler(e, key)" type="range" :min="property.min" :max="property.max" :step="property.shiftStep" />&nbsp;&nbsp;
-                    {{ property.format(viewSettings[key]) }} ({{ property.incKey }}/{{ property.decKey }})
+                    {{ property.format(viewSettings[key]) }} {{ keyHint(property) }}
                     <button v-if="key === 'margin'" class="auto-btn" :disabled="!tierlist.activePrev"
-                        title="Space from the art, like a newly added Pokemon" @click="applyAutoMargin">Auto</button>
+                        title="Space from the art, like a newly added Pokemon" @click="autoMarginSelected">Auto</button>
                 </template>
             </div>
         </template>
+
+        <div class="whole-list">
+            <div class="whole-list-title">Whole tier list</div>
+            <button title="Replace every margin on this tier list with one worked out from the art" @click="autoMarginWholeTierlist">Auto Margins</button>
+            <button @click="resetStyleWholeTierlist('scale')">Reset Scale</button>
+            <button @click="resetStyleWholeTierlist('offset')">Reset Offset</button>
+            <button @click="resetStyleWholeTierlist('saturation')">Reset Sat</button>
+            <button @click="resetStyleWholeTierlist('flip')">Reset Flip</button>
+            <button title="Reset scale, offset, saturation and flip, then apply auto margins" @click="resetAllStyleWholeTierlist">Reset All</button>
+        </div>
     </Window>
 </template>
 
@@ -342,6 +349,25 @@ onKeyStroke((e) => {
 .auto-btn:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+.whole-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #fff3;
+}
+.whole-list-title {
+  grid-column: 1 / -1;
+  font-size: 0.85em;
+  color: #bbb;
+}
+.whole-list button {
+  padding: 3px 0;
+  font-size: 0.8em;
+  cursor: pointer;
 }
 
 /* Switch styles */

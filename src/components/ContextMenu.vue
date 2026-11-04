@@ -2,12 +2,13 @@
 import { computed, ref } from 'vue';
 import { useElementSize, onClickOutside, onKeyStroke } from '@vueuse/core';
 
-import { ContextMenuOption, useContextMenu } from '../store';
+import { ContextMenuOption, isTypingTarget, useContextMenu, useShortcuts } from '../store';
 
 const el = ref(null)
 const { width, height } = useElementSize(el)
 
 const contextMenu = useContextMenu();
+const shortcuts = useShortcuts();
 
 const position = computed(() => {
     let x = contextMenu.pos.x;
@@ -40,32 +41,21 @@ onKeyStroke((e) => {
 })
 
 onKeyStroke((e) => {
-    // Allow shortcuts when document body has focus OR when inside a popup overlay
-    const isInPopup = (e.target as Element)?.closest('.quick-calendar-overlay');
-    if (e.target !== document.body && !isInPopup) return;
+    // Allow shortcuts when document body has focus OR when inside a popup overlay, or
+    // Edit View, where a slider or button keeps the focus after it has been used.
+    const target = e.target as Element;
+    const isInPopup = target?.closest('.quick-calendar-overlay');
+    const isInEditView = target?.closest('.edit-view-window') && !isTypingTarget(target);
+    if (e.target !== document.body && !isInPopup && !isInEditView) return;
     if (!contextMenu.shortcutsActive) return;
-    
-    // Check if Edit View window is open - disable W and E shortcuts
-    const isEditViewOpen = (e.target as Element)?.closest('.window') !== null;
-    const key = e.key.toLowerCase();
-    
+
     for (const option of contextMenu.options) {
-        if (option.hidden) continue;
-        const shortcut = option.shortcut;
-        
-        // Skip W and E shortcuts when Edit View is open
-        if (isEditViewOpen && (shortcut.key === 'w' || shortcut.key === 'e')) {
-            continue;
-        }
-        
-        if (shortcut.key === key && 
-            shortcut.ctrl === e.ctrlKey && 
-            shortcut.shift === e.shiftKey && 
-            shortcut.alt === e.altKey
-        ) {
+        if (option.hidden || !option.id) continue;
+        if (shortcuts.matches(option.id, e)) {
             const result = option.action();
             if (result === false) return;
             e.preventDefault();
+            return;
         }
     }
 })
@@ -86,7 +76,7 @@ function callAction(option: ContextMenuOption) {
     }" ref="el">
         <template v-for="option in contextMenu.options">
             <hr v-if="option.label === ''"/>
-            <div v-else-if="!option.hidden" @click="callAction(option)" :data-kbd="option.shortcutString">{{ option.label }}</div>
+            <div v-else-if="!option.hidden && !option.keyOnly" @click="callAction(option)" :data-kbd="option.id ? shortcuts.bindingOf(option.id) : ''">{{ option.label }}</div>
         </template>
     </div>
 </template>
@@ -96,6 +86,8 @@ function callAction(option: ContextMenuOption) {
 .context-menu {
     position: fixed;
     width: 280px;
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
     background-color: #333;
     color: #fff;
     border-radius: 10px;

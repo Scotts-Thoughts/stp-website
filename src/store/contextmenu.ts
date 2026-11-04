@@ -5,20 +5,18 @@ export type ContextMenuOptionArg = {
     label: string | (() => string)
     action?: () => boolean | void | undefined
     hidden?: boolean | (() => boolean)
-    shortcut?: string
+    /** The action's id in SHORTCUT_ACTIONS, which makes it reachable from the keyboard. */
+    id?: string
+    /** Reachable from the keyboard only, not listed in the menu. */
+    keyOnly?: boolean
 };
 
 export type ContextMenuOption = {
     get label(): string
     get hidden(): boolean
     action(): boolean | void | undefined
-    shortcut: {
-        key: string
-        ctrl: boolean
-        shift: boolean
-        alt: boolean
-    },
-    shortcutString: string
+    id: string
+    keyOnly: boolean
 };
 
 
@@ -38,7 +36,6 @@ export const useContextMenu = defineStore("contextmenu", () => {
     }
 
     function setOptions(_options: ContextMenuOptionArg[]) {
-        const NO_SHORTCUT = { key: "", ctrl: false, shift: false, alt: false };
         const newOptions = [];
         for (const option of _options) {
             const o: ContextMenuOption = {
@@ -53,28 +50,10 @@ export const useContextMenu = defineStore("contextmenu", () => {
                     return option.hidden;
                 },
                 action: option.action ?? (() => {}),
-                shortcut: NO_SHORTCUT,
-                shortcutString: "",
+                id: option.id ?? "",
+                keyOnly: option.keyOnly ?? false,
             };
             newOptions.push(o);
-
-            if (!option.action || !option.shortcut) {
-                continue;
-            }
-
-            const parts = option.shortcut.toLowerCase().split("+").map(p => p.trim());
-            const ctrl = parts.includes("ctrl");
-            const shift = parts.includes("shift");
-            const alt = parts.includes("alt");
-            const keys = parts.filter(k => !["ctrl", "shift", "alt"].includes(k));
-
-            if (keys.length !== 1) {
-                console.warn("Invalid shortcut:", option.shortcut);
-                continue;
-            }
-
-            o.shortcut = { key: keys[0], ctrl, shift, alt };
-            o.shortcutString = `${ctrl ? "Ctrl+" : ""}${shift ? "Shift+" : ""}${alt ? "Alt+" : ""}${keys[0].toUpperCase()}`;
         }
         options.value = newOptions;
     }

@@ -222,6 +222,7 @@ const targetSpriteSize = computed(() => {
 const spriteSize = ref(MAX_SPRITE_SIZE);
 let spriteSizeFrameId: number | null = null;
 let _inPlayback = false; // non-reactive flag: snap sprite size immediately during playback/recording
+let _inRecording = false; // non-reactive flag: spriteSize is driven manually while recording
 
 watch(targetSpriteSize, (target) => {
     // Snap immediately on first computation (no animation on load)
@@ -868,7 +869,6 @@ const recordLabelOpacity = ref(1);
 // Smoothed credits-dodge offset (px) per threshold (keyed by tier index) while recording:
 // the label snaps up to clear the credits but eases back down once its text has cleared.
 const recordLabelBottom = ref<Map<number, number>>(new Map());
-let _inRecording = false;       // non-reactive: spriteSize is driven manually while recording
 let _recordSmoothInit = false;  // first smoothing frame snaps to target (no slide-in)
 const RECORD_SMOOTH = 0.15;     // per-frame lerp factor (~matches the live 0.55s ease)
 
@@ -1648,14 +1648,14 @@ function setupContextMenu() {
     contextMenu.setOptions([
         {
             label: 'Hide Timeline',
-            shortcut: 'N',
+            id: 'toggle-timeline',
             action() {
                 emit('close');
             },
         },
         {
             label: 'Export as PNG',
-            shortcut: 'Ctrl+E',
+            id: 'export-png',
             action() {
                 if (!containerRef.value) return;
                 let startToastId = -1;
@@ -1681,6 +1681,7 @@ function setupContextMenu() {
         },
         {
             label: 'Snapshot',
+            id: 'timeline-snapshot',
             action() {
                 const name = `Snap ${snapshots.value.length + 1}`;
                 takeSnapshot(name);
@@ -1694,6 +1695,7 @@ function setupContextMenu() {
         })),
         {
             label: 'Automate Camera',
+            id: 'timeline-camera',
             action() {
                 cameraWindowActive.value = !cameraWindowActive.value;
             },
@@ -1703,6 +1705,7 @@ function setupContextMenu() {
         },
         {
             label: () => globalStore.animateReranking ? 'Animate Re-Ranking: ON' : 'Animate Re-Ranking: OFF',
+            id: 'animate-reranking',
             action() {
                 globalStore.animateReranking = !globalStore.animateReranking;
                 if (!globalStore.animateReranking) {
@@ -1715,7 +1718,7 @@ function setupContextMenu() {
         },
         {
             label: () => isPlaying.value ? 'Stop Playback' : 'Play',
-            shortcut: 'P',
+            id: 'timeline-play',
             action() {
                 if (isPlaying.value || countdown.value > 0) {
                     stopPlayback();
@@ -1726,6 +1729,7 @@ function setupContextMenu() {
         },
         ...(hasElectronVideo ? [{
             label: 'Export Sequence as .mov',
+            id: 'timeline-export',
             action() { recordSequence(); },
         }] : []),
     ]);

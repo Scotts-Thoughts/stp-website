@@ -2,7 +2,8 @@
 import { ref, watch, useTemplateRef, onMounted, onUnmounted, nextTick, type ComponentPublicInstance } from 'vue'
 import { onKeyDown } from '@vueuse/core';
 
-import { useContextMenu, useFileExporter, useGlobal, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion, type ContextMenuOptionArg } from '../store';
+import { useContextMenu, useFileExporter, useGlobal, useShortcuts, useTierlist, useToast, useWorkspace, useReranking, type PendingInsertion, type ContextMenuOptionArg } from '../store';
+import { autoMarginSelected, autoMarginWholeTierlist, resetAllStyleWholeTierlist, resetStyleWholeTierlist } from '../store/style-actions';
 import { currentDate, parseDate } from '../utils/time';
 import { recordRerankingAnimation, recordChangeAnimation, captureStill, buildCaptureOpts, buildFontEmbedCSS, type RecordingProgress } from '../utils/video-recorder';
 import { nextFrame, type CaptureOpts } from '../utils/frame-compositor';
@@ -17,6 +18,7 @@ import EditFilterWindow from './EditFilterWindow.vue'
 import EditThresholdsWindow from './EditThresholdsWindow.vue'
 import EditRosterWindow from './EditRosterWindow.vue'
 import SearchWindow from './SearchWindow.vue'
+import ShortcutsWindow from './ShortcutsWindow.vue'
 import TierListTableWindow from './TierListTableWindow.vue'
 import Tierlist from '../components/TierList.vue'
 import TimelineView from '../components/TimelineView.vue'
@@ -35,6 +37,7 @@ const contextMenu = useContextMenu();
 const fileexporter = useFileExporter();
 const toast = useToast();
 const reranking = useReranking();
+const shortcuts = useShortcuts();
 
 const root = useTemplateRef("root");
 
@@ -137,6 +140,7 @@ const tierlistTableActive = ref(false);
 const quickCalendarActive = ref(false);
 const changeAnimActive = ref(false);
 const statesActive = ref(false);
+const shortcutsWindowActive = ref(false);
 const timelineActive = ref(false);
 const timelineRef = ref<ComponentPublicInstance | null>(null);
 
@@ -199,14 +203,14 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     // },
     {
         label: "Import CSV",
-        shortcut: "V",
+        id: 'import-csv',
         action() {
             mode.value = mode.value === Mode.INSERT_CSV_METRIC ? Mode.VIEWING : Mode.INSERT_CSV_METRIC;
         }
     },
     {
         label: "Insert Metrics",
-        shortcut: "X",
+        id: 'insert-metrics',
         // hidden: global.obsPresent,
         action() {
             mode.value = mode.value === Mode.INSERT_METRIC ? Mode.VIEWING : Mode.INSERT_METRIC;
@@ -214,7 +218,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: "Edit Metrics",
-        shortcut: "Z",
+        id: 'edit-metrics',
         // hidden: global.obsPresent,
         action() {
             mode.value = mode.value === Mode.EDIT_METRIC ? Mode.VIEWING : Mode.EDIT_METRIC;
@@ -222,7 +226,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: "Edit View",
-        shortcut: "C",
+        id: 'edit-view',
         // hidden: global.obsPresent,
         action() {
             mode.value = mode.value === Mode.EDIT_VIEW ? Mode.VIEWING : Mode.EDIT_VIEW;
@@ -230,28 +234,28 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: "Edit Filter",
-        shortcut: "F",
+        id: 'edit-filter',
         action() {
             mode.value = mode.value === Mode.EDIT_FILTER ? Mode.VIEWING : Mode.EDIT_FILTER;
         }
     },
     {
         label: "Thresholds",
-        shortcut: "G",
+        id: 'thresholds',
         action() {
             mode.value = mode.value === Mode.EDIT_THRESHOLDS ? Mode.VIEWING : Mode.EDIT_THRESHOLDS;
         }
     },
     {
         label: "Assign Species",
-        shortcut: "S",
+        id: 'assign-species',
         action() {
             mode.value = mode.value === Mode.EDIT_ROSTER ? Mode.VIEWING : Mode.EDIT_ROSTER;
         }
     },
     {
         label: () => timelineActive.value ? "Hide Timeline" : "Show Timeline",
-        shortcut: 'N',
+        id: 'toggle-timeline',
         action() {
             timelineActive.value = !timelineActive.value;
             if (timelineActive.value) {
@@ -261,7 +265,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: "Toggle Category",
-        shortcut: 'D',
+        id: 'toggle-category',
         action() {
             if (tierlist.activeCategory === "first") {
                 tierlist.activeCategory = "best";
@@ -277,7 +281,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: () => tierlistTableActive.value ? "Hide Table" : "Show Table",
-        shortcut: 'T',
+        id: 'toggle-table',
         action() {
             tierlistTableActive.value = !tierlistTableActive.value;
             if (tierlistTableActive.value) {
@@ -290,20 +294,21 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: () => global.popoutActive ? "Hide Popout" : "Show Popout",
-        shortcut: 'R',
+        id: 'toggle-popout',
         action() {
             global.popoutActive = !global.popoutActive;
         },
     },
     {
         label: () => global.showBoxArt ? "Hide Box Art" : "Show Box Art",
+        id: 'toggle-box-art',
         action() {
             global.showBoxArt = !global.showBoxArt;
         },
     },
     {
         label: "Hide Selected",
-        shortcut: "H",
+        id: 'hide-selected',
         action() {
             for (const entry of tierlist.selectedPkmn) {
                 tierlist.excludePokemonList.push(entry);
@@ -313,10 +318,11 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: () => global.animateReranking ? "Animate Re-Ranking: ON" : "Animate Re-Ranking: OFF",
+        id: 'animate-reranking',
         action() {
             global.animateReranking = !global.animateReranking;
             toast.addToast(
-                global.animateReranking ? 'Animate Re-Ranking enabled (Ctrl+F1 to confirm)' : 'Animate Re-Ranking disabled',
+                global.animateReranking ? `Animate Re-Ranking enabled (${shortcuts.bindingOf('play-reranking') || 'assign a shortcut'} to confirm)` : 'Animate Re-Ranking disabled',
                 'info',
                 { timeout: 2000 }
             );
@@ -328,6 +334,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Export Re-Ranking as Video',
+        id: 'export-rerank-video',
         hidden: () => !global.animateReranking,
         action() {
             if (!window.electronVideo) {
@@ -345,19 +352,37 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
         label: "", // Separator
     },
     {
+        label: 'Auto Margin: Selected',
+        id: 'auto-margin',
+        action() { autoMarginSelected(); },
+    },
+    {
+        label: 'Auto Margin: Whole List',
+        id: 'auto-margin-all',
+        action() { autoMarginWholeTierlist(); },
+    },
+    { label: 'Reset Scale', id: 'reset-scale', keyOnly: true, action() { resetStyleWholeTierlist('scale'); } },
+    { label: 'Reset Offset', id: 'reset-offset', keyOnly: true, action() { resetStyleWholeTierlist('offset'); } },
+    { label: 'Reset Saturation', id: 'reset-saturation', keyOnly: true, action() { resetStyleWholeTierlist('saturation'); } },
+    { label: 'Reset Flip', id: 'reset-flip', keyOnly: true, action() { resetStyleWholeTierlist('flip'); } },
+    { label: 'Reset All Style', id: 'reset-all-style', keyOnly: true, action() { resetAllStyleWholeTierlist(); } },
+    {
+        label: "", // Separator
+    },
+    {
         label: 'Save Workspace',
-        shortcut: 'Ctrl+S',
+        id: 'save-workspace',
         // hidden: global.obsPresent,
         action() { workspace.saveWorkspace(); }
     },
     {
         label: 'Reload Workspace',
-        shortcut: 'Ctrl+R',
+        id: 'reload-workspace',
         action() { workspace.loadWorkspace(); }
     },
     {
         label: 'Close Tierlist',
-        shortcut: 'Alt+W',
+        id: 'close-tierlist',
         action() { 
             contextMenu.hide();
             emit('close'); 
@@ -369,7 +394,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Export as PNG',
-        shortcut: 'Ctrl+E',
+        id: 'export-png',
         action() {
             let startToastId = -1;
             // Export the wrapper element directly - it has fixed 1920x1080 dimensions
@@ -399,6 +424,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     //     }
     {
         label: 'Export Change Animation',
+        id: 'export-change-animation',
         action() {
             if (!window.electronVideo) {
                 toast.addToast('Video export requires the desktop app', 'error');
@@ -409,7 +435,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Quick Date Filter',
-        shortcut: 'Q',
+        id: 'quick-date',
         action() {
             quickCalendarActive.value = !quickCalendarActive.value;
         }
@@ -419,21 +445,21 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Capture State',
-        shortcut: 'B',
+        id: 'capture-state',
         action() {
             captureCurrentState();
         }
     },
     {
         label: () => tierlist.activeStateId ? 'States (viewing one)' : 'States',
-        shortcut: 'A',
+        id: 'states',
         action() {
             statesActive.value = !statesActive.value;
         }
     },
     {
         label: 'Set to Current Date',
-        shortcut: 'W',
+        id: 'set-current-date',
         action() {
             const today = currentDate();
             tierlist.releaseDateTreshold = today;
@@ -442,7 +468,7 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Set to Max Date',
-        shortcut: 'E',
+        id: 'set-max-date',
         action() {
             const maxDate = '2099-01-01';
             tierlist.releaseDateTreshold = maxDate;
@@ -451,17 +477,26 @@ const mainContextMenuOptions: ContextMenuOptionArg[] = [
     },
     {
         label: 'Cycle Credits',
-        shortcut: 'Ctrl+Q',
+        id: 'cycle-credits',
         // hidden: global.obsPresent,
         action() { global.cycleCreditModes(); }
+    },
+    {
+        label: "", // Separator
+    },
+    {
+        label: 'Keyboard Shortcuts',
+        id: 'shortcuts',
+        action() {
+            shortcutsWindowActive.value = !shortcutsWindowActive.value;
+        }
     },
 ];
 
 contextMenu.setOptions(mainContextMenuOptions);
 
-onKeyDown(' ', (e) => {
+onKeyDown((e) => shortcuts.matches('search', e), (e) => {
     if (e.target !== document.body) return;
-    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     searchActive.value = !searchActive.value;
     e.preventDefault();
 });
@@ -474,6 +509,7 @@ onKeyDown('Escape', (e) => {
     tierlistTableActive.value = false;
     quickCalendarActive.value = false;
     statesActive.value = false;
+    shortcutsWindowActive.value = false;
     timelineActive.value = false;
     e.preventDefault();
 });
@@ -772,9 +808,8 @@ async function exportChangeSequence(payload: ChangeAnimationExport) {
 // Last animation data for replay
 let lastReplay: { insertions: PendingInsertion[]; pokemon: string } | null = null;
 
-// Ctrl+F1: Start the re-ranking animation, or replay the last one
-onKeyDown('F1', async (e) => {
-    if (!e.ctrlKey || e.shiftKey || e.altKey) return;
+// Start the re-ranking animation, or replay the last one
+onKeyDown((e) => shortcuts.matches('play-reranking', e), async (e) => {
     e.preventDefault();
     if (!global.animateReranking) return;
     if (reranking.isAnimating) return;
@@ -865,6 +900,7 @@ onKeyDown('F1', async (e) => {
         <EditThresholdsWindow :visible="mode === Mode.EDIT_THRESHOLDS" @close="mode = Mode.VIEWING" />
         <EditRosterWindow    :visible="mode === Mode.EDIT_ROSTER"    @close="mode = Mode.VIEWING" />
         <SearchWindow        :visible="searchActive"                 @close="searchActive = false" />
+        <ShortcutsWindow     :visible="shortcutsWindowActive"        @close="shortcutsWindowActive = false" />
         <QuickCalendarPopup  :visible="quickCalendarActive"          @close="quickCalendarActive = false" />
         <ExportChangeAnimationModal
             :visible="changeAnimActive"

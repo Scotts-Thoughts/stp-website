@@ -10,6 +10,7 @@ import { getGameConfig, getGameOrder, TIERLIST_GAMES } from '../constants/games'
 import { formatDate, parseDate, parseTime } from '../utils/time';
 import { defineStore } from 'pinia';
 import { noteEntriesChanging } from './auto-margins';
+import { mergeSpellingDuplicates } from '../utils/pokemon';
 
 /** Parse JSON, allowing trailing commas (which are invalid in strict JSON). */
 function parseJsonLenient(jsonStr: string): unknown {
@@ -764,6 +765,8 @@ function parseTierlist(data: string): Tierlist | undefined {
             attempt.faults_0 = () => addMetrics(attempt.resets_0!, attempt.blackouts_0!);
         }
     }
+
+    mergeSpellingDuplicates(tierlist.entries);
 
     return tierlist;
 }
