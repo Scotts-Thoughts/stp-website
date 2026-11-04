@@ -4,6 +4,8 @@ import Window from '../components/Window.vue'
 import { useTierlist, useWorkspace } from '../store';
 import { onKeyStroke } from '@vueuse/core';
 import { removeAlternativeMoveType } from '../utils/pokemon';
+import { MARGIN_MIN, MARGIN_MAX } from '../utils/auto-margin';
+import { autoMarginFor } from '../store/auto-margins';
 
 
 const VIEW_PROPERTY_MAP = {
@@ -39,8 +41,8 @@ const VIEW_PROPERTY_MAP = {
     },
     'margin': {
         label: 'Margin',
-        min: -25,
-        max: 25,
+        min: MARGIN_MIN,
+        max: MARGIN_MAX,
         step: 1,
         shiftStep: 1,
         incKey: 'G',
@@ -84,7 +86,7 @@ const viewSettings = computed(() => {
     const setting = workspace.pokemonSettings[baseName];
     return {
         name: pkmn,
-        margin: setting?.margins[prev] ?? 1,
+        margin: setting?.margins[prev] ?? 0,
         scale: setting?.scale ?? 1,
         saturation: setting?.saturation ?? 0,
         offset: setting?.offset ?? 0,
@@ -132,6 +134,17 @@ function updateViewSettings(key: ViewPropertyKey, updater: (oldValue: number) =>
     }
 }
 
+
+/** Sets the margin to the one worked out from the two pieces of art (as for a newly added Pokemon). */
+async function applyAutoMargin() {
+    const right = tierlist.activePkmn;
+    const left = tierlist.activePrev;
+    if (right === '' || left === '') return;
+    const value = await autoMarginFor({ left, right });
+    // Ignore the result if the selection moved on while the art was loading.
+    if (value === null || tierlist.activePkmn !== right || tierlist.activePrev !== left) return;
+    updateViewSettings('margin', () => value);
+}
 
 function inputHandler(e: Event, key: ViewPropertyKey) {
     const target = e.target as HTMLInputElement;
@@ -310,6 +323,8 @@ onKeyStroke((e) => {
                 <template v-else>
                     <input :value="viewSettings[key]" @input="e => inputHandler(e, key)" type="range" :min="property.min" :max="property.max" :step="property.shiftStep" />&nbsp;&nbsp;
                     {{ property.format(viewSettings[key]) }} ({{ property.incKey }}/{{ property.decKey }})
+                    <button v-if="key === 'margin'" class="auto-btn" :disabled="!tierlist.activePrev"
+                        title="Space from the art, like a newly added Pokemon" @click="applyAutoMargin">Auto</button>
                 </template>
             </div>
         </template>
@@ -318,6 +333,17 @@ onKeyStroke((e) => {
 
 
 <style scoped>
+.auto-btn {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.auto-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 /* Switch styles */
 .switch {
   position: relative;

@@ -1,6 +1,8 @@
 import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import type { Metrics } from "./tierlist";
+import { useWorkspace } from "./workspace";
+import { preloadSilhouettes } from "./auto-margins";
 
 export type PendingInsertion = {
     pokemon: string;
@@ -50,6 +52,9 @@ export const useReranking = defineStore("reranking", () => {
 
     function addPendingInsertion(pokemon: string, attempt: Partial<Metrics>) {
         pendingInsertions.value.push({ pokemon, attempt });
+        // The animation measures the moved Pokemon's margin straight after the data swap, so
+        // have its art and its future neighbours' ready for the automatic margin by then.
+        preloadSilhouettes([pokemon, ...Object.keys(useWorkspace().activeTierlist.entries)]);
     }
 
     function clearPending() {

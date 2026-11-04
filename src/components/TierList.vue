@@ -2,6 +2,7 @@
 import { computed, onUnmounted, reactive, ref, nextTick, watch } from 'vue'
 import PkmnImage from './PkmnImage.vue';
 import MetricPopout from './MetricPopout.vue';
+import UnrankedModal from './UnrankedModal.vue';
 import { useGlobal, useTierlist, useFileExporter, CreditMode, useToast, useWorkspace, useReranking, RerankPhase, useContextMenu, type ContextMenuOptionArg } from '../store';
 import { getBaseSpeciesName, hasAlternativeMoveType } from '../utils/pokemon';
 import { recordScrollAnimation } from '../utils/video-recorder';
@@ -311,8 +312,14 @@ const data = computed(() => {
     const speciesOf = tierlist.countedTotal ? tierlist.getRosterUnit : getBaseSpeciesName;
     const uniqueSpecies = new Set(rankedEntries.map(entry => speciesOf(entry.pkmnName)));
     // With a roster assigned, only its species count toward X, so X never exceeds Y.
+    // Units on the graphic that aren't assigned are kept (unit -> first entry) for the modal.
     const roster = tierlist.rosterUnits;
+    const unassigned = new Map<string, string>();
     if (roster) {
+        for (const entry of rankedEntries) {
+            const unit = speciesOf(entry.pkmnName);
+            if (!roster.has(unit) && !unassigned.has(unit)) unassigned.set(unit, entry.pkmnName);
+        }
         for (const species of uniqueSpecies) {
             if (!roster.has(species)) uniqueSpecies.delete(species);
         }
@@ -322,6 +329,12 @@ const data = computed(() => {
         groups:      tierlist.groupedEntries, 
         total:       tierlist.countedTotal?.value ?? tierlist.activeTierlist.total[tierlist.activeTotalIndex], 
         totalRanked: uniqueSpecies.size,
+        // Filtered roster units with no ranked entry, in roster order (null without a roster).
+        unranked:    tierlist.filteredRosterUnits
+            ? [...tierlist.filteredRosterUnits].filter(unit => !uniqueSpecies.has(unit))
+            : null,
+        // Ranked on the graphic but not among the assigned species, in graphic order.
+        unassigned:  [...unassigned].map(([unit, pkmnName]) => ({ unit, pkmnName })),
         labels:      tierlist.labels,
         rankedLabel: tierlist.activeCategory === "first" ? "Ranked" : "Ranked", // TODO: change labels
     };
@@ -347,6 +360,13 @@ onUnmounted(unselectAll)
 
 // Ranked total popover state
 const showRankedPopover = ref(false);
+// With species assigned, clicking Ranked lists what is still to rank instead.
+const showUnrankedModal = ref(false);
+
+function onRankedClick() {
+    if (tierlist.countedTotal?.source === 'roster') showUnrankedModal.value = true;
+    else showRankedPopover.value = !showRankedPopover.value;
+}
 const newTotalInput = ref('');
 
 function selectTotal(index: number) {
@@ -1216,7 +1236,7 @@ function sleep(ms: number): Promise<void> {
                 </div>
             </div>
         </template>
-        <div :class="'ranked gray-grad rounded'" @click.stop="showRankedPopover = !showRankedPopover">
+        <div :class="'ranked gray-grad rounded'" @click.stop="onRankedClick()">
             <template v-if="global.showBoxArt && boxArtSrc">
                 <img class="ranked-boxart" :src="boxArtSrc" alt="" />
                 <div class="ranked-divider"></div>
@@ -1227,15 +1247,7 @@ function sleep(ms: number): Promise<void> {
             </div>
             <!-- Ranked total popover -->
             <div v-if="showRankedPopover" class="ranked-popover" @click.stop>
-                <template v-if="tierlist.countedTotal?.source === 'roster'">
-                    <div class="ranked-popover-title">Assigned species</div>
-                    <div class="ranked-popover-note">
-                        Total is counted from the {{ tierlist.rosterUnits?.size }} assigned
-                        species{{ tierlist.rosterLines.length ? ' (an evolutionary line counts once)' : '' }}{{ tierlist.speciesFiltersActive ? ' that match the active filters' : '' }}.
-                        Edit them with Assign Species (S).
-                    </div>
-                </template>
-                <template v-else>
+                <template v-if="tierlist.countedTotal?.source !== 'roster'">
                 <div v-if="tierlist.countedTotal?.source === 'pokedex'" class="ranked-popover-note">
                     Filters active: showing the {{ tierlist.countedTotal.value }} species in
                     {{ tierlist.activeTierlist.game }}'s pokedex that match them. Assign species (S)
@@ -1272,6 +1284,12 @@ function sleep(ms: number): Promise<void> {
             </div>
         </div>
         <div class="credits-box"></div>
+        <UnrankedModal
+            v-if="showUnrankedModal && data.unranked"
+            :units="data.unranked"
+            :unassigned="data.unassigned"
+            @close="showUnrankedModal = false"
+        />
     </div>
 </template>
 
@@ -1627,8 +1645,9 @@ function sleep(ms: number): Promise<void> {
 .ranked-popover {
     position: absolute;
     bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    /* Anchored to the Ranked box's right edge so it grows leftward over the
+       Pokemon tiers, never rightward into the credits column (column 4). */
+    right: 0;
     margin-bottom: 8px;
     background: #333333e8;
     box-shadow: 0 10px 25px #000;

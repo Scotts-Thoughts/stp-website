@@ -703,20 +703,27 @@ export const useTierlist = defineStore("tierlist", () => {
     });
 
     /**
+     * The roster units that pass the type / growth rate / generation filters, in roster order;
+     * null when no roster is assigned. A line passes the filters on its highest stage, the one
+     * its entries show.
+     */
+    const filteredRosterUnits = computed<Set<string> | null>(() => {
+        const roster = activeTierlist.value.roster;
+        if (!roster?.length) return null;
+        return new Set(roster
+            .filter(name => passesSpeciesFilters(lineOfSpecies.value.has(getSpeciesRootName(name)) ? getRosterUnit(name) : name))
+            .map(getRosterUnit));
+    });
+
+    /**
      * The Y of "Ranked: X/Y" when it is counted rather than picked from the hand-entered totals:
      * - a roster is assigned: its species that pass the type / growth rate / generation filters
      * - no roster, but one of those filters is on: the game's pokedex species that pass them
      * null means "use the selected hand-entered total".
      */
     const countedTotal = computed<{ value: number, source: 'roster' | 'pokedex' } | null>(() => {
-        const roster = activeTierlist.value.roster;
-        if (roster?.length) {
-            // A line passes the filters on its highest stage, the one its entries show.
-            const units = new Set(roster
-                .filter(name => passesSpeciesFilters(lineOfSpecies.value.has(getSpeciesRootName(name)) ? getRosterUnit(name) : name))
-                .map(getRosterUnit));
-            return { value: units.size, source: 'roster' };
-        }
+        const units = filteredRosterUnits.value;
+        if (units) return { value: units.size, source: 'roster' };
         if (!speciesFiltersActive.value) return null;
         const game = activeTierlist.value.game;
         const names = getPokedexEntryNames(game);
@@ -855,6 +862,7 @@ export const useTierlist = defineStore("tierlist", () => {
         activeThresholdList,
         activeAttempts,
         activeFilteredAttempts,
+        firstAttempts,
         activeTagList,
         activeYearList,
         releaseDateTreshold,
@@ -875,6 +883,7 @@ export const useTierlist = defineStore("tierlist", () => {
         getEntryLine,
         getDisplayPokemon,
         getRosterUnit,
+        filteredRosterUnits,
         countedTotal,
         labels,
         heldBack,

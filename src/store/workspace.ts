@@ -9,6 +9,7 @@ import Result from '../utils/result';
 import { getGameConfig, getGameOrder, TIERLIST_GAMES } from '../constants/games';
 import { formatDate, parseDate, parseTime } from '../utils/time';
 import { defineStore } from 'pinia';
+import { noteEntriesChanging } from './auto-margins';
 
 /** Parse JSON, allowing trailing commas (which are invalid in strict JSON). */
 function parseJsonLenient(jsonStr: string): unknown {
@@ -333,6 +334,9 @@ export const useWorkspace = defineStore("workspace", () => {
     }
 
     function insertActiveTierlistEntry(pokemon: string, attempt: Partial<Metrics>) {
+        // New neighbours get spacing worked out from their art (see store/auto-margins.ts).
+        noteEntriesChanging();
+
         // convert metrics to correct types
         // and ensure all metrics are defined
         for (const key of METRIC_STATIC_KEYS) {
