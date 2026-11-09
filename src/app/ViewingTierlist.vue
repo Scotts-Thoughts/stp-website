@@ -667,7 +667,8 @@ function displayedRanking(): string[] {
 
 /**
  * The full graphics package for a video that features several PokÃ©mon released on the same
- * date: one change video per PokÃ©mon (revealed one by one, in `order`), plus stills:
+ * date: one change video per PokÃ©mon (revealed one by one, in `order`), plus stills. Each
+ * name below is prefixed with the tierlist's file name, e.g. `gen3-firered-postgame-0-start.png`:
  *
  *   0-start.png                   the tierlist before the first reveal
  *   1-<pkmn>.mov                  reveals the first PokÃ©mon
@@ -691,7 +692,10 @@ async function exportChangeSequence(payload: ChangeAnimationExport) {
     const folder = await window.electronDialog.selectFolder();
     if (!folder) return;
     const sep = folder.includes('\\') ? '\\' : '/';
-    const joinPath = (name: string) => folder.replace(/[\\/]+$/, '') + sep + name;
+    // Every file starts with the tierlist's file name (e.g. `gen3-firered-postgame-1-mew.mov`),
+    // so the packages of two lists of one game (round 1 and postgame) can share a folder.
+    const listPrefix = fileSlug(tierlist.activeTierlist.filename.replace(/\.json$/i, '') || tierlist.activeTierlist.name) + '-';
+    const joinPath = (name: string) => folder.replace(/[\\/]+$/, '') + sep + listPrefix + name;
 
     const prevPopout = global.popoutActive;
     const prevTypes = [...tierlist.includeTypeList];
@@ -717,11 +721,11 @@ async function exportChangeSequence(payload: ChangeAnimationExport) {
         await settleView();
         try {
             const dataUrl = await captureStill(wrapperEl, captureOpts);
-            const res = await window.electronDialog!.saveFile(folder!, filename, dataUrl);
+            const res = await window.electronDialog!.saveFile(folder!, listPrefix + filename, dataUrl);
             if (res.success) saved++;
-            else failures.push(`${filename}: ${res.error}`);
+            else failures.push(`${listPrefix}${filename}: ${res.error}`);
         } catch (e) {
-            failures.push(`${filename}: ${e}`);
+            failures.push(`${listPrefix}${filename}: ${e}`);
         } finally {
             tierlist.selectedPkmn.clear();
         }
@@ -750,7 +754,7 @@ async function exportChangeSequence(payload: ChangeAnimationExport) {
                 onProgress: toaster.onProgress,
             });
             if (!ok) {
-                failures.push(`${n}-${slug}.mov`);
+                failures.push(`${listPrefix}${n}-${slug}.mov`);
                 break;
             }
             saved++;
